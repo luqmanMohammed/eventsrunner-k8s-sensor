@@ -14,6 +14,12 @@ import (
 	"k8s.io/client-go/tools/cache"
 )
 
+type OverideEventFunctionOpts struct {
+	AddFunc    func(obj interface{})
+	UpdateFunc func(obj interface{}, newObj interface{})
+	DeleteFunc func(obj interface{})
+}
+
 type SensorOpts struct {
 	KubeConfig  *rest.Config
 	SensorLabel string
@@ -21,9 +27,10 @@ type SensorOpts struct {
 
 type Sensor struct {
 	*SensorOpts
+	*OverideEventFunctionOpts
 	dynamicClientSet         dynamic.Interface
 	dynamicInformerFactories []*dynamicinformer.DynamicSharedInformerFactory
-	stopChan                 chan struct{}
+	StopChan                 chan struct{}
 	lock                     sync.Mutex
 }
 
@@ -33,32 +40,40 @@ func New(sensorOpts *SensorOpts) *Sensor {
 		SensorOpts:               sensorOpts,
 		dynamicClientSet:         dynamicClientSet,
 		dynamicInformerFactories: make([]*dynamicinformer.DynamicSharedInformerFactory, 0),
-		stopChan:                 make(chan struct{}),
+		StopChan:                 make(chan struct{}),
 	}
 }
 
 func (s *Sensor) AddFunc(obj interface{}) {
+
 }
 
 func (s *Sensor) UpdateFunc(obj, newObj interface{}) {
+
 }
 
 func (s *Sensor) DeleteFunc(obj interface{}) {
+
 }
 
 func (s *Sensor) ReloadRules(sensorRules *[]rules.Rule) error {
 	s.lock.Lock()
 	defer s.lock.Unlock()
-	s.stopChan <- struct{}{}
+	s.StopChan <- struct{}{}
 	s.dynamicInformerFactories = make([]*dynamicinformer.DynamicSharedInformerFactory, 0)
-	s.stopChan = make(chan struct{})
-	return s.Start(sensorRules)
+	s.StopChan = make(chan struct{})
+	s.Start(sensorRules)
+	return nil
 }
 
-func (s *Sensor) Start(sensorRules *[]rules.Rule) error {
+func (s *Sensor) Start(sensorRules *[]rules.Rule) {
 	for _, t_rule := range *sensorRules {
 		dyInformerFactory := dynamicinformer.NewFilteredDynamicSharedInformerFactory(s.dynamicClientSet, 0, metav1.NamespaceAll, dynamicinformer.TweakListOptionsFunc(func(options *metav1.ListOptions) {
-			options.LabelSelector = fmt.Sprintf("er-%s!=false,%s", s.SensorLabel, t_rule.LabelFilter)
+			labelSeclector := fmt.Sprintf("er-%s!=false", s.SensorLabel)
+			if t_rule.LabelFilter != "" {
+				labelSeclector += "," + t_rule.LabelFilter
+			}
+			options.LabelSelector = labelSeclector
 			options.FieldSelector = t_rule.FieldFilter
 		}))
 		res_informer := dyInformerFactory.ForResource(schema.GroupVersionResource{
@@ -68,17 +83,20 @@ func (s *Sensor) Start(sensorRules *[]rules.Rule) error {
 		}).Informer()
 		res_informer.AddEventHandler(cache.FilteringResourceEventHandler{
 			FilterFunc: func(obj interface{}) bool {
-				meta, ok := obj.(metav1.ObjectMeta)
+				meta, ok := obj.(metav1.Object)
 				if !ok {
 					return false
 				}
-				if t_rule.Namespaces != nil && !common.StringInSlice(meta.Namespace, t_rule.Namespaces) {
+				if len(t_rule.Namespaces) != 0 && !common.StringInSlice(meta.GetNamespace(), t_rule.Namespaces) {
 					return false
 				}
 				return true
 			},
 			Handler: cache.ResourceEventHandlerFuncs{
 				AddFunc: func() func(obj interface{}) {
+					if s.OverideEventFunctionOpts != nil {
+						return s.OverideEventFunctionOpts.AddFunc
+					}
 					for _, t_eventType := range t_rule.EventTypes {
 						if t_eventType == rules.ADDED {
 							return s.AddFunc
@@ -87,6 +105,9 @@ func (s *Sensor) Start(sensorRules *[]rules.Rule) error {
 					return nil
 				}(),
 				UpdateFunc: func() func(obj interface{}, newObj interface{}) {
+					if s.OverideEventFunctionOpts != nil {
+						return s.OverideEventFunctionOpts.UpdateFunc
+					}
 					for _, t_eventType := range t_rule.EventTypes {
 						if t_eventType == rules.ADDED {
 							return s.UpdateFunc
@@ -95,6 +116,9 @@ func (s *Sensor) Start(sensorRules *[]rules.Rule) error {
 					return nil
 				}(),
 				DeleteFunc: func() func(obj interface{}) {
+					if s.OverideEventFunctionOpts != nil {
+						return s.OverideEventFunctionOpts.DeleteFunc
+					}
 					for _, t_eventType := range t_rule.EventTypes {
 						if t_eventType == rules.ADDED {
 							return s.DeleteFunc
@@ -105,7 +129,7 @@ func (s *Sensor) Start(sensorRules *[]rules.Rule) error {
 			},
 		})
 		s.dynamicInformerFactories = append(s.dynamicInformerFactories, &dyInformerFactory)
-		dyInformerFactory.Start(s.stopChan)
+		dyInformerFactory.Start(s.StopChan)
 	}
-	return nil
+	<-s.StopChan
 }

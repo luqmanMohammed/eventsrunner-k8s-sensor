@@ -12,8 +12,8 @@ type EventType string
 //Filter will be used to filter specific events based on labels and fields selectors
 //All default kubernetes field selectors should work
 type Filter struct {
-	LabelFilter string
-	FieldFilter string
+	LabelFilter string `default:""`
+	FieldFilter string `default:""`
 }
 
 //Rule struct is used to represent a rule that will be used to filter events
