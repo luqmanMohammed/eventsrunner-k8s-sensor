@@ -2,6 +2,7 @@ package sensor
 
 import (
 	"fmt"
+	"sync"
 
 	"github.com/luqmanMohammed/er-k8s-sensor/common"
 	"github.com/luqmanMohammed/er-k8s-sensor/sensor/rules"
@@ -21,8 +22,9 @@ type SensorOpts struct {
 type Sensor struct {
 	*SensorOpts
 	dynamicClientSet         dynamic.Interface
-	dynamicInformerFactories map[*rules.Rule]*dynamicinformer.DynamicSharedInformerFactory
+	dynamicInformerFactories []*dynamicinformer.DynamicSharedInformerFactory
 	stopChan                 chan struct{}
+	lock                     sync.Mutex
 }
 
 func New(sensorOpts *SensorOpts) *Sensor {
@@ -30,23 +32,25 @@ func New(sensorOpts *SensorOpts) *Sensor {
 	return &Sensor{
 		SensorOpts:               sensorOpts,
 		dynamicClientSet:         dynamicClientSet,
-		dynamicInformerFactories: make(map[*rules.Rule]*dynamicinformer.DynamicSharedInformerFactory),
+		dynamicInformerFactories: make([]*dynamicinformer.DynamicSharedInformerFactory, 0),
 		stopChan:                 make(chan struct{}),
 	}
 }
 
-func (s Sensor) AddFunc(obj interface{}) {
+func (s *Sensor) AddFunc(obj interface{}) {
 }
 
-func (s Sensor) UpdateFunc(obj, newObj interface{}) {
+func (s *Sensor) UpdateFunc(obj, newObj interface{}) {
 }
 
-func (s Sensor) DeleteFunc(obj interface{}) {
+func (s *Sensor) DeleteFunc(obj interface{}) {
 }
 
 func (s *Sensor) ReloadRules(sensorRules *[]rules.Rule) error {
+	s.lock.Lock()
+	defer s.lock.Unlock()
 	s.stopChan <- struct{}{}
-	s.dynamicInformerFactories = make(map[*rules.Rule]*dynamicinformer.DynamicSharedInformerFactory)
+	s.dynamicInformerFactories = make([]*dynamicinformer.DynamicSharedInformerFactory, 0)
 	s.stopChan = make(chan struct{})
 	return s.Start(sensorRules)
 }
@@ -100,7 +104,7 @@ func (s *Sensor) Start(sensorRules *[]rules.Rule) error {
 				}(),
 			},
 		})
-		s.dynamicInformerFactories[&t_rule] = &dyInformerFactory
+		s.dynamicInformerFactories = append(s.dynamicInformerFactories, &dyInformerFactory)
 		dyInformerFactory.Start(s.stopChan)
 	}
 	return nil
