@@ -11,8 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v2
-    - name: Set up Go
-      uses: actions/setup-go@v2
+    - uses: actions/setup-go@v2
       with:
         go-version: ${{ env.go_version }}
     - uses: actions/cache@v2
@@ -43,8 +42,7 @@ jobs:
           cluster-name: cluster
           args: >-
             --image=${{ matrix.k3s_k8s_image }}
-      - name: Set up go
-        uses: actions/setup-go@v2
+      - uses: actions/setup-go@v2
         with:
           go-version: ${{ env.go_version }}
       - uses: actions/checkout@v2
