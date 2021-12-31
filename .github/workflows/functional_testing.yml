@@ -2,15 +2,18 @@ name: Build and Test
 on:
   pull_request:
     branches: [ main ]
+
+env:
+  go_version: 1.17
+
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v2
-    - name: Set up Go
-      uses: actions/setup-go@v2
+    - uses: actions/setup-go@v2
       with:
-        go-version: 1.17
+        go-version: ${{ env.go_version }}
     - uses: actions/cache@v2
       with:
         path: |
@@ -22,22 +25,26 @@ jobs:
     - name: Build
       run: go build ./...
 
-  test_with_k8s_latest:
+  test_with_k8s:
     needs: build
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        k3s_k8s_image:
+          - rancher/k3s:v1.23.1-rc1-k3s1
+          - rancher/k3s:v1.22.5-k3s1
+          - rancher/k3s:v1.21.8-k3s1
+      fail-fast: false
     steps:
       - name: Create Simple K8s Cluster
         uses: AbsaOSS/k3d-action@v2
         with:
-          cluster-name: "cluster-latest"
+          cluster-name: cluster
           args: >-
-            --image=rancher/k3s:v1.23.1-rc1-k3s1
-            --kubeconfig-update-default
-            --kubeconfig-switch-context
-      - name: Set up go
-        uses: actions/setup-go@v2
+            --image=${{ matrix.k3s_k8s_image }}
+      - uses: actions/setup-go@v2
         with:
-          go-version: 1.17
+          go-version: ${{ env.go_version }}
       - uses: actions/checkout@v2
       - uses: actions/cache@v2
         with:
