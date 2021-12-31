@@ -12,12 +12,13 @@ import (
 	"k8s.io/client-go/dynamic/dynamicinformer"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/cache"
+	"k8s.io/client-go/util/workqueue"
 )
 
-type OverideEventFunctionOpts struct {
-	AddFunc    func(obj interface{})
-	UpdateFunc func(obj interface{}, newObj interface{})
-	DeleteFunc func(obj interface{})
+type Event struct {
+	EventType rules.EventType
+	Rule      *rules.Rule
+	Objects   []metav1.Object
 }
 
 type SensorOpts struct {
@@ -27,8 +28,8 @@ type SensorOpts struct {
 
 type Sensor struct {
 	*SensorOpts
-	*OverideEventFunctionOpts
 	dynamicClientSet         dynamic.Interface
+	Queue                    workqueue.Interface
 	dynamicInformerFactories []*dynamicinformer.DynamicSharedInformerFactory
 	StopChan                 chan struct{}
 	lock                     sync.Mutex
@@ -41,22 +42,56 @@ func New(sensorOpts *SensorOpts) *Sensor {
 		dynamicClientSet:         dynamicClientSet,
 		dynamicInformerFactories: make([]*dynamicinformer.DynamicSharedInformerFactory, 0),
 		StopChan:                 make(chan struct{}),
+		Queue:                    workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "sensor"),
 	}
 }
 
-func (s *Sensor) AddFunc(obj interface{}) {
-
+func (s *Sensor) addFuncDecorator(rule *rules.Rule) func(obj interface{}) {
+	for _, t_eventType := range rule.EventTypes {
+		if t_eventType == rules.ADDED {
+			return func(obj interface{}) {
+				s.Queue.Add(Event{
+					EventType: rules.ADDED,
+					Rule:      rule,
+					Objects:   []metav1.Object{obj.(metav1.Object)},
+				})
+			}
+		}
+	}
+	return nil
 }
 
-func (s *Sensor) UpdateFunc(obj, newObj interface{}) {
-
+func (s *Sensor) updateFuncDecorator(rule *rules.Rule) func(obj interface{}, newObj interface{}) {
+	for _, t_eventType := range rule.EventTypes {
+		if t_eventType == rules.MODIFIED {
+			return func(obj interface{}, newObj interface{}) {
+				s.Queue.Add(Event{
+					EventType: rules.MODIFIED,
+					Rule:      rule,
+					Objects:   []metav1.Object{obj.(metav1.Object), newObj.(metav1.Object)},
+				})
+			}
+		}
+	}
+	return nil
 }
 
-func (s *Sensor) DeleteFunc(obj interface{}) {
-
+func (s *Sensor) deleteFuncDecorator(rule *rules.Rule) func(obj interface{}) {
+	for _, t_eventType := range rule.EventTypes {
+		if t_eventType == rules.DELETED {
+			return func(obj interface{}) {
+				s.Queue.Add(Event{
+					EventType: rules.DELETED,
+					Rule:      rule,
+					Objects:   []metav1.Object{obj.(metav1.Object)},
+				})
+			}
+		}
+	}
+	return nil
 }
 
-func (s *Sensor) ReloadRules(sensorRules *[]rules.Rule) error {
+func (s *Sensor) ReloadRules(sensorRules []*rules.Rule) error {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 	s.StopChan <- struct{}{}
@@ -66,8 +101,8 @@ func (s *Sensor) ReloadRules(sensorRules *[]rules.Rule) error {
 	return nil
 }
 
-func (s *Sensor) Start(sensorRules *[]rules.Rule) {
-	for _, t_rule := range *sensorRules {
+func (s *Sensor) Start(sensorRules []*rules.Rule) {
+	for _, t_rule := range sensorRules {
 		dyInformerFactory := dynamicinformer.NewFilteredDynamicSharedInformerFactory(s.dynamicClientSet, 0, metav1.NamespaceAll, dynamicinformer.TweakListOptionsFunc(func(options *metav1.ListOptions) {
 			labelSeclector := fmt.Sprintf("er-%s!=false", s.SensorLabel)
 			if t_rule.LabelFilter != "" {
@@ -81,6 +116,7 @@ func (s *Sensor) Start(sensorRules *[]rules.Rule) {
 			Version:  t_rule.APIVersion,
 			Resource: t_rule.Resource,
 		}).Informer()
+
 		res_informer.AddEventHandler(cache.FilteringResourceEventHandler{
 			FilterFunc: func(obj interface{}) bool {
 				meta, ok := obj.(metav1.Object)
@@ -93,39 +129,9 @@ func (s *Sensor) Start(sensorRules *[]rules.Rule) {
 				return true
 			},
 			Handler: cache.ResourceEventHandlerFuncs{
-				AddFunc: func() func(obj interface{}) {
-					if s.OverideEventFunctionOpts != nil {
-						return s.OverideEventFunctionOpts.AddFunc
-					}
-					for _, t_eventType := range t_rule.EventTypes {
-						if t_eventType == rules.ADDED {
-							return s.AddFunc
-						}
-					}
-					return nil
-				}(),
-				UpdateFunc: func() func(obj interface{}, newObj interface{}) {
-					if s.OverideEventFunctionOpts != nil {
-						return s.OverideEventFunctionOpts.UpdateFunc
-					}
-					for _, t_eventType := range t_rule.EventTypes {
-						if t_eventType == rules.ADDED {
-							return s.UpdateFunc
-						}
-					}
-					return nil
-				}(),
-				DeleteFunc: func() func(obj interface{}) {
-					if s.OverideEventFunctionOpts != nil {
-						return s.OverideEventFunctionOpts.DeleteFunc
-					}
-					for _, t_eventType := range t_rule.EventTypes {
-						if t_eventType == rules.ADDED {
-							return s.DeleteFunc
-						}
-					}
-					return nil
-				}(),
+				AddFunc:    s.addFuncDecorator(t_rule),
+				UpdateFunc: s.updateFuncDecorator(t_rule),
+				DeleteFunc: s.deleteFuncDecorator(t_rule),
 			},
 		})
 		s.dynamicInformerFactories = append(s.dynamicInformerFactories, &dyInformerFactory)
