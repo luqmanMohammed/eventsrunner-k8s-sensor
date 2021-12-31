@@ -40,7 +40,7 @@ jobs:
       - name: Create Simple K8s Cluster
         uses: AbsaOSS/k3d-action@v2
         with:
-          cluster-name: cluster-${{ env.GITHUB_JOB }}
+          cluster-name: cluster
           args: >-
             --image=${{ matrix.k3s_k8s_image }}
       - name: Set up go
