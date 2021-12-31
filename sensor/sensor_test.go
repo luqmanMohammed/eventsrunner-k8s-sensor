@@ -15,7 +15,7 @@ import (
 )
 
 var (
-	temp_rules_basic = []rules.Rule{
+	temp_rules_basic = []*rules.Rule{
 		{
 			Group:      "",
 			APIVersion: "v1",
@@ -24,7 +24,7 @@ var (
 			Namespaces: []string{"default"},
 		},
 	}
-	temp_rules_reload = []rules.Rule{
+	temp_rules_reload = []*rules.Rule{
 		{
 			Group:      "",
 			APIVersion: "v1",
@@ -60,7 +60,7 @@ func TestSensorStart(t *testing.T) {
 		KubeConfig:  config,
 		SensorLabel: "k8s",
 	})
-	go sensor.Start(&temp_rules_basic)
+	go sensor.Start(temp_rules_basic)
 	defer close(sensor.StopChan)
 	time.Sleep(3 * time.Second)
 	if len(sensor.dynamicInformerFactories) != 1 {
@@ -75,19 +75,12 @@ func TestSensorStart(t *testing.T) {
 // 	if len(sensor.dynamicInformerFactories) != 2 {
 // 		t.Error("Failed to reload sensor")
 // 	}
+
 // }
 
 func TestPodAdded(t *testing.T) {
 	sensor := setupSensor()
-	addEventTriggerd := false
-	sensor.OverideEventFunctionOpts = &OverideEventFunctionOpts{
-		AddFunc: func(obj interface{}) {
-			if obj.(metav1.Object).GetName() == "test-pod" {
-				addEventTriggerd = true
-			}
-		},
-	}
-	go sensor.Start(&temp_rules_basic)
+	go sensor.Start(temp_rules_basic)
 	pod := &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-pod",
@@ -102,9 +95,29 @@ func TestPodAdded(t *testing.T) {
 			},
 		},
 	}
-	kubernetes.NewForConfigOrDie(sensor.KubeConfig).CoreV1().Pods("default").Create(context.Background(), pod, metav1.CreateOptions{})
-	for !addEventTriggerd {
-		time.Sleep(1 * time.Second)
+	test_pod, err := kubernetes.NewForConfigOrDie(sensor.KubeConfig).CoreV1().Pods("default").Create(context.Background(), pod, metav1.CreateOptions{})
+	if err != nil {
+		t.Errorf("Failed to create pod: %v", err)
 	}
-
+	retryCount := 0
+	for {
+		if sensor.Queue.Len() > 0 {
+			item, shutdown := sensor.Queue.Get()
+			event := item.(*Event)
+			if event.Objects[0].GetUID() == test_pod.GetUID() {
+				t.Logf("Successfully received event: %s\n", event.Objects[0].GetName())
+				break
+			}
+			if shutdown {
+				t.Error("Item not found in queue")
+			}
+		}
+		if retryCount == 30 {
+			t.Error("Failed to add pod to queue")
+			break
+		} else {
+			retryCount++
+			time.Sleep(1 * time.Second)
+		}
+	}
 }

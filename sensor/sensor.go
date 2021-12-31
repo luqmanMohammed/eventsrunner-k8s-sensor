@@ -29,7 +29,7 @@ type SensorOpts struct {
 type Sensor struct {
 	*SensorOpts
 	dynamicClientSet         dynamic.Interface
-	Queue                    workqueue.Interface
+	Queue                    workqueue.RateLimitingInterface
 	dynamicInformerFactories []*dynamicinformer.DynamicSharedInformerFactory
 	StopChan                 chan struct{}
 	lock                     sync.Mutex
@@ -42,7 +42,7 @@ func New(sensorOpts *SensorOpts) *Sensor {
 		dynamicClientSet:         dynamicClientSet,
 		dynamicInformerFactories: make([]*dynamicinformer.DynamicSharedInformerFactory, 0),
 		StopChan:                 make(chan struct{}),
-		Queue:                    workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "sensor"),
+		Queue:                    workqueue.NewRateLimitingQueue(workqueue.DefaultControllerRateLimiter()),
 	}
 }
 
@@ -50,7 +50,7 @@ func (s *Sensor) addFuncDecorator(rule *rules.Rule) func(obj interface{}) {
 	for _, t_eventType := range rule.EventTypes {
 		if t_eventType == rules.ADDED {
 			return func(obj interface{}) {
-				s.Queue.Add(Event{
+				s.Queue.Add(&Event{
 					EventType: rules.ADDED,
 					Rule:      rule,
 					Objects:   []metav1.Object{obj.(metav1.Object)},
@@ -65,7 +65,7 @@ func (s *Sensor) updateFuncDecorator(rule *rules.Rule) func(obj interface{}, new
 	for _, t_eventType := range rule.EventTypes {
 		if t_eventType == rules.MODIFIED {
 			return func(obj interface{}, newObj interface{}) {
-				s.Queue.Add(Event{
+				s.Queue.Add(&Event{
 					EventType: rules.MODIFIED,
 					Rule:      rule,
 					Objects:   []metav1.Object{obj.(metav1.Object), newObj.(metav1.Object)},
@@ -80,7 +80,7 @@ func (s *Sensor) deleteFuncDecorator(rule *rules.Rule) func(obj interface{}) {
 	for _, t_eventType := range rule.EventTypes {
 		if t_eventType == rules.DELETED {
 			return func(obj interface{}) {
-				s.Queue.Add(Event{
+				s.Queue.Add(&Event{
 					EventType: rules.DELETED,
 					Rule:      rule,
 					Objects:   []metav1.Object{obj.(metav1.Object)},
