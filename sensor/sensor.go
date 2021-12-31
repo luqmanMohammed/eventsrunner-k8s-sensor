@@ -13,19 +13,26 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/util/workqueue"
+	"k8s.io/klog/v2"
 )
 
+// Event struct holds all information related to an event.
+// TODO: Move to another package
 type Event struct {
 	EventType rules.EventType
 	Rule      *rules.Rule
 	Objects   []metav1.Object
 }
 
+// SensorOpts holds options related to sensor configuration
 type SensorOpts struct {
 	KubeConfig  *rest.Config
 	SensorLabel string
 }
 
+// Sensor struct implements kubernetes informers to sense changes
+// according to the rules defined.
+// Responsible for managing all informers and event queue
 type Sensor struct {
 	*SensorOpts
 	dynamicClientSet         dynamic.Interface
@@ -35,7 +42,13 @@ type Sensor struct {
 	lock                     sync.Mutex
 }
 
+// Creates a new default Sensor. Refer Sensor struct documentation for
+// more information.
+// SensorOpts is required.
 func New(sensorOpts *SensorOpts) *Sensor {
+	if sensorOpts == nil {
+		panic("SensorOpts cannot be nil")
+	}
 	dynamicClientSet := dynamic.NewForConfigOrDie(sensorOpts.KubeConfig)
 	return &Sensor{
 		SensorOpts:               sensorOpts,
@@ -46,7 +59,11 @@ func New(sensorOpts *SensorOpts) *Sensor {
 	}
 }
 
-func (s *Sensor) addFuncDecorator(rule *rules.Rule) func(obj interface{}) {
+// addFuncWrapper wraps inject the rules into the add resource event handler
+// function without affecting its signature.
+// Makes event handler addition dynamic based on the rules by returning nil if
+// ADDED event type is not configured for a specific rule.
+func (s *Sensor) addFuncWrapper(rule *rules.Rule) func(obj interface{}) {
 	for _, t_eventType := range rule.EventTypes {
 		if t_eventType == rules.ADDED {
 			return func(obj interface{}) {
@@ -58,10 +75,16 @@ func (s *Sensor) addFuncDecorator(rule *rules.Rule) func(obj interface{}) {
 			}
 		}
 	}
+	klog.V(4).Infof("ADDED event type is not configured for rule %v", rule)
 	return nil
 }
 
-func (s *Sensor) updateFuncDecorator(rule *rules.Rule) func(obj interface{}, newObj interface{}) {
+// updateFuncWrapper wraps inject the rules into the update resource event handler
+// function without affecting its signature.
+// Makes event handler addition dynamic based on the rules by returning nil if
+// MODIFIED event type is not configured for a specific rule.
+// Old object is stored as primary at index 0 and new object as secoundry at index 1.
+func (s *Sensor) updateFuncWrapper(rule *rules.Rule) func(obj interface{}, newObj interface{}) {
 	for _, t_eventType := range rule.EventTypes {
 		if t_eventType == rules.MODIFIED {
 			return func(obj interface{}, newObj interface{}) {
@@ -73,10 +96,15 @@ func (s *Sensor) updateFuncDecorator(rule *rules.Rule) func(obj interface{}, new
 			}
 		}
 	}
+	klog.V(4).Infof("MODIFIED event type is not configured for rule %v", rule)
 	return nil
 }
 
-func (s *Sensor) deleteFuncDecorator(rule *rules.Rule) func(obj interface{}) {
+// deleteFuncWrapper wraps inject the rules into the delete resource event handler
+// function without affecting its signature.
+// Makes event handler addition dynamic based on the rules by returning nil if
+// DELETED event type is not configured for a specific rule.
+func (s *Sensor) deleteFuncWrapper(rule *rules.Rule) func(obj interface{}) {
 	for _, t_eventType := range rule.EventTypes {
 		if t_eventType == rules.DELETED {
 			return func(obj interface{}) {
@@ -88,20 +116,24 @@ func (s *Sensor) deleteFuncDecorator(rule *rules.Rule) func(obj interface{}) {
 			}
 		}
 	}
+	klog.V(4).Infof("DELETED event type is not configured for rule %v", rule)
 	return nil
 }
 
+// ReloadRules will reload affected sensor rules without requiring a restart.
+// Thread safe.
 func (s *Sensor) ReloadRules(sensorRules []*rules.Rule) error {
-	s.lock.Lock()
 	defer s.lock.Unlock()
-	s.StopChan <- struct{}{}
-	s.dynamicInformerFactories = make([]*dynamicinformer.DynamicSharedInformerFactory, 0)
-	s.StopChan = make(chan struct{})
-	s.Start(sensorRules)
+	s.lock.Lock()
 	return nil
 }
 
+// Start starts the sensor. It will start all informers and register event handlers
+// and filters based on the rules.
+// Start wont validate rules for unniqness.
+// Start is a blocking call.
 func (s *Sensor) Start(sensorRules []*rules.Rule) {
+	klog.V(1).Info("Starting sensor")
 	for _, t_rule := range sensorRules {
 		dyInformerFactory := dynamicinformer.NewFilteredDynamicSharedInformerFactory(s.dynamicClientSet, 0, metav1.NamespaceAll, dynamicinformer.TweakListOptionsFunc(func(options *metav1.ListOptions) {
 			labelSeclector := fmt.Sprintf("er-%s!=false", s.SensorLabel)
@@ -117,8 +149,11 @@ func (s *Sensor) Start(sensorRules []*rules.Rule) {
 			Resource: t_rule.Resource,
 		}).Informer()
 
+		klog.V(3).Infof("Registering event handler for rule %v", t_rule)
+
 		res_informer.AddEventHandler(cache.FilteringResourceEventHandler{
 			FilterFunc: func(obj interface{}) bool {
+				klog.V(5).Infof("FilterFunc called for rule %v with object %v", t_rule, obj)
 				meta, ok := obj.(metav1.Object)
 				if !ok {
 					return false
@@ -129,11 +164,12 @@ func (s *Sensor) Start(sensorRules []*rules.Rule) {
 				return true
 			},
 			Handler: cache.ResourceEventHandlerFuncs{
-				AddFunc:    s.addFuncDecorator(t_rule),
-				UpdateFunc: s.updateFuncDecorator(t_rule),
-				DeleteFunc: s.deleteFuncDecorator(t_rule),
+				AddFunc:    s.addFuncWrapper(t_rule),
+				UpdateFunc: s.updateFuncWrapper(t_rule),
+				DeleteFunc: s.deleteFuncWrapper(t_rule),
 			},
 		})
+		klog.V(2).Infof("Registered Informers for rule %v", t_rule)
 		s.dynamicInformerFactories = append(s.dynamicInformerFactories, &dyInformerFactory)
 		dyInformerFactory.Start(s.StopChan)
 	}
