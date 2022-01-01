@@ -4,6 +4,7 @@ const (
 	ADDED    EventType = "ADDED"
 	MODIFIED EventType = "MODIFIED"
 	DELETED  EventType = "DELETED"
+	NONE     EventType = "NONE"
 )
 
 //EventType is used to reperesent the type of event produced by the kubernetes api server

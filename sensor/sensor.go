@@ -164,6 +164,7 @@ func (s *Sensor) registerRule(rule *rules.Rule) registeredRule {
 		options.FieldSelector = rule.FieldFilter
 	}))
 	resInformer := dyInformerFactory.ForResource(schema.GroupVersionResource{
+		Group:    rule.Group,
 		Version:  rule.APIVersion,
 		Resource: rule.Resource,
 	}).Informer()
