@@ -152,38 +152,6 @@ func TestSensorReload(t *testing.T) {
 	}
 }
 
-func TestEventAdded(t *testing.T) {
-	sensor := setupSensor()
-	go sensor.Start(rules_basic)
-	pod := &v1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-pod",
-			Namespace: "default",
-		},
-		Spec: v1.PodSpec{
-			Containers: []v1.Container{
-				{
-					Name:  "test-container",
-					Image: "nginx",
-				},
-			},
-		},
-	}
-	test_pod, err := kubernetes.NewForConfigOrDie(sensor.KubeConfig).CoreV1().Pods("default").Create(context.Background(), pod, metav1.CreateOptions{})
-	if err != nil {
-		t.Errorf("Failed to create pod: %v", err)
-		return
-	}
-	switch checkIfObjectExistsInQueue(30, sensor, test_pod, rules.ADDED) {
-	case errNotFound:
-		t.Error("Pod not found in queue")
-		return
-	case errTimeout:
-		t.Error("Timeout waiting for pod to be added to queue")
-		return
-	}
-}
-
 func TestCRDCompatibility(t *testing.T) {
 	sensor := setupSensor()
 	crd := apiextv1.CustomResourceDefinition{
@@ -272,4 +240,12 @@ func TestCRDCompatibility(t *testing.T) {
 	case errTimeout:
 		t.Error("Timeout waiting for CRD instance MODIFIED event to be added to queue")
 	}
+}
+
+func TestClusterBoundResourcesComp(t *testing.T) {
+
+}
+
+func TestEventHandlerDynamics(t *testing.T) {
+
 }
