@@ -260,8 +260,8 @@ func TestCRDCompatibility(t *testing.T) {
 		t.Error("Timeout waiting for CRD instance ADD event to be added to queue")
 		return
 	}
-	crdObj.Object["spec"] = "test-spec-modified"
-	updatedCrdInst, err := res.Update(context.Background(), &crdObj, metav1.UpdateOptions{})
+	crdInst.Object["spec"] = "test-spec-modified"
+	updatedCrdInst, err := res.Update(context.Background(), crdInst, metav1.UpdateOptions{})
 	if err != nil {
 		t.Errorf("Failed to update CRD instance: %v", err)
 		return
@@ -272,5 +272,4 @@ func TestCRDCompatibility(t *testing.T) {
 	case errTimeout:
 		t.Error("Timeout waiting for CRD instance MODIFIED event to be added to queue")
 	}
-
 }
