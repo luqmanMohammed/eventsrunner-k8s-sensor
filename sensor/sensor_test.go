@@ -204,4 +204,5 @@ func TestCRDCompatibility(t *testing.T) {
 		return
 	}
 	go sensor.Start(rules_custom)
+	
 }
