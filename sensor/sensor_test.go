@@ -140,6 +140,7 @@ func TestPodAdded(t *testing.T) {
 	test_pod, err := kubernetes.NewForConfigOrDie(sensor.KubeConfig).CoreV1().Pods("default").Create(context.Background(), pod, metav1.CreateOptions{})
 	if err != nil {
 		t.Errorf("Failed to create pod: %v", err)
+		return
 	}
 	checkIfObjectExistsInQueue(t, 30, sensor, test_pod)
 }
