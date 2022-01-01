@@ -15,7 +15,7 @@ import (
 )
 
 var (
-	temp_rules_basic = []*rules.Rule{
+	rules_basic = []*rules.Rule{
 		{
 			Group:      "",
 			APIVersion: "v1",
@@ -24,16 +24,19 @@ var (
 			Namespaces: []string{"default"},
 		},
 	}
-	temp_rules_reload = []*rules.Rule{
+	rules_reload = []*rules.Rule{
 		{
 			Group:      "",
 			APIVersion: "v1",
 			Resource:   "pods",
+			EventTypes: []rules.EventType{rules.ADDED},
 		},
 		{
 			Group:      "",
 			APIVersion: "v1",
-			Resource:   "pods",
+			Resource:   "configmaps",
+			Namespaces: []string{"kube-system"},
+			EventTypes: []rules.EventType{rules.ADDED},
 		},
 	}
 )
@@ -45,6 +48,7 @@ func setupKubconfig() *rest.Config {
 		return config
 	}
 }
+
 func setupSensor() *Sensor {
 	config := setupKubconfig()
 	sensor := New(&SensorOpts{
@@ -54,33 +58,70 @@ func setupSensor() *Sensor {
 	return sensor
 }
 
+func checkIfObjectExistsInQueue(t *testing.T, retry int, sensor *Sensor, searchObject metav1.Object) {
+	retryCount := 0
+	for {
+		if sensor.Queue.Len() > 0 {
+			item, shutdown := sensor.Queue.Get()
+			event := item.(*Event)
+			if event.Objects[0].GetName() == searchObject.GetName() &&
+				event.Objects[0].GetNamespace() == searchObject.GetNamespace() {
+				t.Logf("Successfully received event: %s\n", event.Objects[0].GetName())
+				break
+			}
+			if shutdown {
+				t.Error("Item not found in queue")
+			}
+		}
+		if retryCount == retry {
+			t.Error("Timeout. Failed to find in queue object")
+			break
+		} else {
+			retryCount++
+			time.Sleep(1 * time.Second)
+		}
+	}
+}
+
 func TestSensorStart(t *testing.T) {
 	config := setupKubconfig()
 	sensor := New(&SensorOpts{
 		KubeConfig:  config,
 		SensorLabel: "k8s",
 	})
-	go sensor.Start(temp_rules_basic)
-	defer close(sensor.StopChan)
+	go sensor.Start(rules_basic)
+	defer sensor.Stop()
 	time.Sleep(3 * time.Second)
-	if len(sensor.dynamicInformerFactories) != 1 {
+	if len(sensor.registeredRules) != 1 {
 		t.Error("Failed to start sensor")
 	}
 }
 
-// func TestSensorReload(t *testing.T) {
-// 	sensor := setupSensor()
-// 	err := sensor.Start(&temp_rules_basic)
-// 	sensor.ReloadRules(&temp_rules_reload)
-// 	if len(sensor.dynamicInformerFactories) != 2 {
-// 		t.Error("Failed to reload sensor")
-// 	}
-
-// }
+func TestSensorReload(t *testing.T) {
+	sensor := setupSensor()
+	go sensor.Start(rules_basic)
+	sensor.ReloadRules(rules_reload)
+	if len(sensor.registeredRules) != 2 {
+		t.Error("Failed to reload sensor")
+	}
+	if len(sensor.registeredRules[0].rule.EventTypes) != 1 {
+		t.Error("New rules not correctly loaded")
+	}
+	if sensor.registeredRules[1].rule.Resource != "deployments" {
+		t.Error("New rules not correctly loaded")
+	}
+	configmap := &v1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "kube-proxy",
+			Namespace: "kube-system",
+		},
+	}
+	checkIfObjectExistsInQueue(t, 30, sensor, configmap)
+}
 
 func TestPodAdded(t *testing.T) {
 	sensor := setupSensor()
-	go sensor.Start(temp_rules_basic)
+	go sensor.Start(rules_basic)
 	pod := &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-pod",
@@ -99,25 +140,5 @@ func TestPodAdded(t *testing.T) {
 	if err != nil {
 		t.Errorf("Failed to create pod: %v", err)
 	}
-	retryCount := 0
-	for {
-		if sensor.Queue.Len() > 0 {
-			item, shutdown := sensor.Queue.Get()
-			event := item.(*Event)
-			if event.Objects[0].GetUID() == test_pod.GetUID() {
-				t.Logf("Successfully received event: %s\n", event.Objects[0].GetName())
-				break
-			}
-			if shutdown {
-				t.Error("Item not found in queue")
-			}
-		}
-		if retryCount == 30 {
-			t.Error("Failed to add pod to queue")
-			break
-		} else {
-			retryCount++
-			time.Sleep(1 * time.Second)
-		}
-	}
+	checkIfObjectExistsInQueue(t, 30, sensor, test_pod)
 }
