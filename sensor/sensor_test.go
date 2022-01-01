@@ -113,11 +113,16 @@ func TestSensorReload(t *testing.T) {
 	}
 	configmap := &v1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "kube-proxy",
+			Name:      "test-configmap",
 			Namespace: "kube-system",
 		},
 	}
-	checkIfObjectExistsInQueue(t, 30, sensor, configmap)
+	test_configmap, err := kubernetes.NewForConfigOrDie(sensor.KubeConfig).CoreV1().ConfigMaps("kube-system").Create(context.Background(), configmap, metav1.CreateOptions{})
+	if err != nil {
+		t.Errorf("Failed to create configmap: %v", err)
+		return
+	}
+	checkIfObjectExistsInQueue(t, 30, sensor, test_configmap)
 }
 
 func TestPodAdded(t *testing.T) {
