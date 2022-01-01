@@ -70,11 +70,12 @@ func checkIfObjectExistsInQueue(t *testing.T, retry int, sensor *Sensor, searchO
 				break
 			}
 			if shutdown {
-				t.Error("Item not found in queue")
+				t.Errorf("Item not found. Failed to find object %s:%s in queue", searchObject.GetNamespace(), searchObject.GetName())
 			}
+			sensor.Queue.Done(item)
 		}
 		if retryCount == retry {
-			t.Error("Timeout. Failed to find in queue object")
+			t.Errorf("Timeout. Failed to find object %s:%s in queue", searchObject.GetNamespace(), searchObject.GetName())
 			break
 		} else {
 			retryCount++
@@ -105,9 +106,9 @@ func TestSensorReload(t *testing.T) {
 		t.Error("Failed to reload sensor")
 	}
 	if len(sensor.registeredRules[0].rule.EventTypes) != 1 {
-		t.Error("New rules not correctly loaded")
+		t.Error("New rules are not correctly loaded")
 	}
-	if sensor.registeredRules[1].rule.Resource != "deployments" {
+	if sensor.registeredRules[1].rule.Resource != rules_reload[1].Resource {
 		t.Error("New rules not correctly loaded")
 	}
 	configmap := &v1.ConfigMap{
