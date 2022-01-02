@@ -21,7 +21,7 @@ THE SOFTWARE.
 */
 package main
 
-import "github.com/luqmanMohammed/er-k8s-sensor/cmd"
+import "github.com/luqmanMohammed/events-runner-k8s-sensor/cmd"
 
 func main() {
 	cmd.Execute()
