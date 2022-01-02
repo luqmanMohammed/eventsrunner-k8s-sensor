@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/luqmanMohammed/er-k8s-sensor/common"
-	"github.com/luqmanMohammed/er-k8s-sensor/sensor/rules"
+	"github.com/luqmanMohammed/events-runner-k8s-sensor/common"
+	"github.com/luqmanMohammed/events-runner-k8s-sensor/sensor/rules"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"

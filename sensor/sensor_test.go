@@ -6,12 +6,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/luqmanMohammed/er-k8s-sensor/common"
-	"github.com/luqmanMohammed/er-k8s-sensor/sensor/rules"
+	"github.com/luqmanMohammed/events-runner-k8s-sensor/common"
+	"github.com/luqmanMohammed/events-runner-k8s-sensor/sensor/rules"
 
 	v1 "k8s.io/api/core/v1"
 	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
-	clientapiv1 "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset/typed/apiextensions/v1"
+	clientapiextv1 "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset/typed/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -186,7 +186,7 @@ func TestCRDCompatibility(t *testing.T) {
 		},
 	}
 
-	if _, err := clientapiv1.NewForConfigOrDie(sensor.KubeConfig).CustomResourceDefinitions().Create(context.Background(), &crd, metav1.CreateOptions{}); err != nil {
+	if _, err := clientapiextv1.NewForConfigOrDie(sensor.KubeConfig).CustomResourceDefinitions().Create(context.Background(), &crd, metav1.CreateOptions{}); err != nil {
 		t.Errorf("Failed to create CRD: %v", err)
 		return
 	}
