@@ -54,6 +54,14 @@ var (
 			EventTypes: []rules.EventType{rules.ADDED, rules.MODIFIED},
 		},
 	}
+	rules_clusterbound = []*rules.Rule{
+		{
+			Group:      "",
+			APIVersion: "v1",
+			Resource:   "namespaces",
+			EventTypes: []rules.EventType{rules.ADDED, rules.MODIFIED, rules.DELETED},
+		},
+	}
 )
 
 func setupKubconfig() *rest.Config {
@@ -243,7 +251,37 @@ func TestCRDCompatibility(t *testing.T) {
 }
 
 func TestClusterBoundResourcesComp(t *testing.T) {
+	sensor := setupSensor()
+	go sensor.Start(rules_clusterbound)
+	if !retryFunc(func() bool {
+		if len(sensor.registeredRules) != 1 {
+			t.Logf("Failed to start sensor. Retrying")
+			return false
+		}
+		if sensor.registeredRules[0].rule.Resource != rules_clusterbound[0].Resource {
+			t.Logf("Failed to start sensor. Retrying")
+			return false
+		}
+		return true
+	}, 5) {
+		t.Error("Failed to start sensor")
+	}
 
+	ns := &v1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test-namespace",
+		},
+	}
+	nsObj, err := kubernetes.NewForConfigOrDie(sensor.KubeConfig).CoreV1().Namespaces().Create(context.Background(), ns, metav1.CreateOptions{})
+	if err != nil {
+		t.Errorf("Failed to create namespace: %v", err)
+	}
+	switch checkIfObjectExistsInQueue(30, sensor, nsObj, rules.ADDED) {
+	case errNotFound:
+		t.Error("Namespace not found in queue")
+	case errTimeout:
+		t.Error("Timeout waiting for Namespace to be added to queue")
+	}
 }
 
 func TestEventHandlerDynamics(t *testing.T) {
