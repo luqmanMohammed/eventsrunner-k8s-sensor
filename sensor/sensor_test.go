@@ -54,7 +54,27 @@ var (
 			EventTypes: []rules.EventType{rules.ADDED, rules.MODIFIED},
 		},
 	}
+	rules_clusterbound = []*rules.Rule{
+		{
+			Group:      "",
+			APIVersion: "v1",
+			Resource:   "namespaces",
+			EventTypes: []rules.EventType{rules.ADDED, rules.MODIFIED, rules.DELETED},
+		},
+	}
 )
+
+func retryFunc(retryFunc func() bool, count int) bool {
+	retryCount := 0
+	for retryCount < count {
+		retryCount++
+		if retryFunc() {
+			return true
+		}
+		time.Sleep(1 * time.Second)
+	}
+	return false
+}
 
 func setupKubconfig() *rest.Config {
 	if config, err := common.GetKubeAPIConfig(true, ""); err != nil {
@@ -194,7 +214,6 @@ func TestCRDCompatibility(t *testing.T) {
 	time.Sleep(3 * time.Second)
 
 	go sensor.Start(rules_custom)
-	// Improve more by adding logic to actually create,modify and delete ERCRD objects using unstructured
 
 	crdGVR := schema.GroupVersionResource{
 		Group:    "k8ser.io",
@@ -243,7 +262,37 @@ func TestCRDCompatibility(t *testing.T) {
 }
 
 func TestClusterBoundResourcesComp(t *testing.T) {
+	sensor := setupSensor()
+	go sensor.Start(rules_clusterbound)
+	if !retryFunc(func() bool {
+		if len(sensor.registeredRules) != 1 {
+			t.Logf("Failed to start sensor. Retrying")
+			return false
+		}
+		if sensor.registeredRules[0].rule.Resource != rules_clusterbound[0].Resource {
+			t.Logf("Failed to start sensor. Retrying")
+			return false
+		}
+		return true
+	}, 5) {
+		t.Error("Failed to start sensor")
+	}
 
+	ns := &v1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test-namespace",
+		},
+	}
+	nsObj, err := kubernetes.NewForConfigOrDie(sensor.KubeConfig).CoreV1().Namespaces().Create(context.Background(), ns, metav1.CreateOptions{})
+	if err != nil {
+		t.Errorf("Failed to create namespace: %v", err)
+	}
+	switch checkIfObjectExistsInQueue(30, sensor, nsObj, rules.ADDED) {
+	case errNotFound:
+		t.Error("Namespace not found in queue")
+	case errTimeout:
+		t.Error("Timeout waiting for Namespace to be added to queue")
+	}
 }
 
 func TestEventHandlerDynamics(t *testing.T) {
