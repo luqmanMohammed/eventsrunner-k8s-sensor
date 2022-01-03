@@ -64,6 +64,18 @@ var (
 	}
 )
 
+func retryFunc(retryFunc func() bool, count int) bool {
+	retryCount := 0
+	for retryCount < count {
+		retryCount++
+		if retryFunc() {
+			return true
+		}
+		time.Sleep(1 * time.Second)
+	}
+	return false
+}
+
 func setupKubconfig() *rest.Config {
 	if config, err := common.GetKubeAPIConfig(true, ""); err != nil {
 		panic(err)
@@ -202,7 +214,6 @@ func TestCRDCompatibility(t *testing.T) {
 	time.Sleep(3 * time.Second)
 
 	go sensor.Start(rules_custom)
-	// Improve more by adding logic to actually create,modify and delete ERCRD objects using unstructured
 
 	crdGVR := schema.GroupVersionResource{
 		Group:    "k8ser.io",
