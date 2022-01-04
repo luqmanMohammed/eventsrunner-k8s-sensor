@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/luqmanMohammed/events-runner-k8s-sensor/common"
-	"github.com/luqmanMohammed/events-runner-k8s-sensor/sensor/rules"
+	"github.com/luqmanMohammed/eventsrunner-k8s-sensor/common"
+	"github.com/luqmanMohammed/eventsrunner-k8s-sensor/sensor/rules"
 
 	v1 "k8s.io/api/core/v1"
 	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
