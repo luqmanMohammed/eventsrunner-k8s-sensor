@@ -3,6 +3,7 @@ package sensor
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -134,9 +135,17 @@ func TestSensorStart(t *testing.T) {
 	})
 	go sensor.Start(rules_basic)
 	defer sensor.Stop()
-	time.Sleep(3 * time.Second)
-	if len(sensor.registeredRules) != 1 {
+
+	if !retryFunc(func() bool {
+		fmt.Println(len(sensor.registeredRules))
+		if len(sensor.registeredRules) != 1 {
+			t.Error("Failed to start sensor")
+			return false
+		}
+		return true
+	}, 5) {
 		t.Error("Failed to start sensor")
+		return
 	}
 }
 
@@ -144,15 +153,26 @@ func TestSensorReload(t *testing.T) {
 	sensor := setupSensor()
 	go sensor.Start(rules_basic)
 	sensor.ReloadRules(rules_reload)
-	if len(sensor.registeredRules) != 2 {
-		t.Error("Failed to reload sensor")
+
+	if !retryFunc(func() bool {
+		if len(sensor.registeredRules) != 2 {
+			t.Error("Failed to reload sensor")
+			return false
+		}
+		if len(sensor.registeredRules[0].rule.EventTypes) != 1 {
+			t.Error("New rules are not correctly loaded")
+			return false
+		}
+		if sensor.registeredRules[1].rule.Resource != rules_reload[1].Resource {
+			t.Error("New rules not correctly loaded")
+			return false
+		}
+		return true
+	}, 5) {
+		t.Error("Failed to start sensor")
+		return
 	}
-	if len(sensor.registeredRules[0].rule.EventTypes) != 1 {
-		t.Error("New rules are not correctly loaded")
-	}
-	if sensor.registeredRules[1].rule.Resource != rules_reload[1].Resource {
-		t.Error("New rules not correctly loaded")
-	}
+
 	configmap := &v1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-configmap",
@@ -211,9 +231,22 @@ func TestCRDCompatibility(t *testing.T) {
 		return
 	}
 
-	time.Sleep(3 * time.Second)
-
 	go sensor.Start(rules_custom)
+
+	if !retryFunc(func() bool {
+		if len(sensor.registeredRules) != 1 {
+			t.Logf("Failed to start sensor. Retrying")
+			return false
+		}
+		if sensor.registeredRules[0].rule.Resource != rules_custom[0].Resource {
+			t.Logf("Failed to start sensor. Retrying")
+			return false
+		}
+		return true
+	}, 5) {
+		t.Error("Failed to start sensor")
+		return
+	}
 
 	crdGVR := schema.GroupVersionResource{
 		Group:    "k8ser.io",
@@ -276,6 +309,7 @@ func TestClusterBoundResourcesComp(t *testing.T) {
 		return true
 	}, 5) {
 		t.Error("Failed to start sensor")
+		return
 	}
 
 	ns := &v1.Namespace{
@@ -286,6 +320,7 @@ func TestClusterBoundResourcesComp(t *testing.T) {
 	nsObj, err := kubernetes.NewForConfigOrDie(sensor.KubeConfig).CoreV1().Namespaces().Create(context.Background(), ns, metav1.CreateOptions{})
 	if err != nil {
 		t.Errorf("Failed to create namespace: %v", err)
+		return
 	}
 	switch checkIfObjectExistsInQueue(30, sensor, nsObj, rules.ADDED) {
 	case errNotFound:
