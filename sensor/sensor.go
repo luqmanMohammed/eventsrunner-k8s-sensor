@@ -10,6 +10,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/dynamic/dynamicinformer"
+	"k8s.io/client-go/informers"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/util/workqueue"
@@ -28,13 +29,13 @@ type Event struct {
 // It holds required rule management objects.
 type registeredRule struct {
 	rule            *rules.Rule
-	ruleK8sInformer dynamicinformer.DynamicSharedInformerFactory
+	ruleK8sInformer informers.GenericInformer
 	stopChan        chan struct{}
 }
 
 // startInformer starts the informer for a specific rule.
 func (rr *registeredRule) startInformer() {
-	rr.ruleK8sInformer.Start(rr.stopChan)
+	go rr.ruleK8sInformer.Informer().Run(rr.stopChan)
 }
 
 // SensorOpts holds options related to sensor configuration
@@ -155,23 +156,29 @@ func (s *Sensor) ReloadRules(sensorRules []*rules.Rule) {
 }
 
 func (s *Sensor) registerRule(rule *rules.Rule) registeredRule {
-	dyInformerFactory := dynamicinformer.NewFilteredDynamicSharedInformerFactory(s.dynamicClientSet, 0, metav1.NamespaceAll, dynamicinformer.TweakListOptionsFunc(func(options *metav1.ListOptions) {
-		labelSeclector := fmt.Sprintf("er-%s!=false", s.SensorLabel)
-		if rule.LabelFilter != "" {
-			labelSeclector += "," + rule.LabelFilter
-		}
-		options.LabelSelector = labelSeclector
-		options.FieldSelector = rule.FieldFilter
-	}))
-	resInformer := dyInformerFactory.ForResource(schema.GroupVersionResource{
-		Group:    rule.Group,
-		Version:  rule.APIVersion,
-		Resource: rule.Resource,
-	}).Informer()
+
+	dynamicInformer := dynamicinformer.NewFilteredDynamicInformer(
+		s.dynamicClientSet,
+		schema.GroupVersionResource{
+			Group:    rule.Group,
+			Version:  rule.APIVersion,
+			Resource: rule.Resource,
+		},
+		metav1.NamespaceAll,
+		0,
+		cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc},
+		dynamicinformer.TweakListOptionsFunc(func(options *metav1.ListOptions) {
+			labelSeclector := fmt.Sprintf("er-%s!=false", s.SensorLabel)
+			if rule.LabelFilter != "" {
+				labelSeclector += "," + rule.LabelFilter
+			}
+			options.LabelSelector = labelSeclector
+			options.FieldSelector = rule.FieldFilter
+		}))
 
 	klog.V(3).Infof("Registering event handler for rule %v", rule)
 
-	resInformer.AddEventHandler(cache.FilteringResourceEventHandler{
+	dynamicInformer.Informer().AddEventHandler(cache.FilteringResourceEventHandler{
 		FilterFunc: func(obj interface{}) bool {
 			klog.V(5).Infof("FilterFunc called for rule %v with object %v", rule, obj)
 			meta, ok := obj.(metav1.Object)
@@ -194,7 +201,7 @@ func (s *Sensor) registerRule(rule *rules.Rule) registeredRule {
 	return registeredRule{
 		rule:            rule,
 		stopChan:        ruleStopChan,
-		ruleK8sInformer: dyInformerFactory,
+		ruleK8sInformer: dynamicInformer,
 	}
 }
 
