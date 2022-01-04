@@ -1,4 +1,4 @@
-module github.com/luqmanMohammed/events-runner-k8s-sensor
+module github.com/luqmanMohammed/eventsrunner-k8s-sensor
 
 go 1.17
 
