@@ -1,7 +1,7 @@
 name: Build and Test
 on:
   pull_request:
-    branches: [ main ]
+    branches: [main]
 
 env:
   go_version: 1.17
@@ -10,47 +10,49 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v2
-    - uses: actions/setup-go@v2
-      with:
-        go-version: ${{ env.go_version }}
-    - uses: actions/cache@v2
-      with:
-        path: |
-          ~/.cache/go-build
-          ~/go/pkg/mod
-        key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-        restore-keys: |
-          ${{ runner.os }}-go-
-    - name: Build
-      run: go build ./...
+      - uses: actions/checkout@v2
+      - uses: actions/setup-go@v2
+        with:
+          go-version: ${{ env.go_version }}
+      - uses: actions/cache@v2
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+      - name: Build
+        run: go build ./...
 
   analyze:
-    needs: [ build ]
+    needs: [build]
     runs-on: ubuntu-latest
     permissions:
       actions: read
       contents: read
       security-events: write
-
-    strategy:
-      fail-fast: false
-      matrix:
-        language: [ 'go' ]
-
     steps:
-    - uses: actions/checkout@v2
-    - name: Initialize CodeQL
-      uses: github/codeql-action/init@v1
-      with:
-        languages: ${{ matrix.language }}
-
-    - name: Build
-      run: go build ./...
-
-    - name: Perform CodeQL Analysis
-      uses: github/codeql-action/analyze@v1
-
+      - uses: actions/checkout@v2
+      - uses: actions/setup-go@v2
+        with:
+          go-version: ${{ env.go_version }}
+      - uses: actions/cache@v2
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v1
+        with:
+          languages: go
+      - name: Build
+        run: go build ./...
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v1
 
   test_with_k8s:
     needs: build
@@ -63,16 +65,10 @@ jobs:
           - rancher/k3s:v1.21.8-k3s1
       fail-fast: false
     steps:
-      - name: Create Simple K8s Cluster
-        uses: AbsaOSS/k3d-action@v2
-        with:
-          cluster-name: cluster
-          args: >-
-            --image=${{ matrix.k3s_k8s_image }}
+      - uses: actions/checkout@v2
       - uses: actions/setup-go@v2
         with:
           go-version: ${{ env.go_version }}
-      - uses: actions/checkout@v2
       - uses: actions/cache@v2
         with:
           path: |
@@ -81,5 +77,11 @@ jobs:
           key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
           restore-keys: |
             ${{ runner.os }}-go-
+      - name: Create Simple K8s Cluster
+        uses: AbsaOSS/k3d-action@v2
+        with:
+          cluster-name: cluster
+          args: >-
+            --image=${{ matrix.k3s_k8s_image }}
       - name: Run tests
         run: go test ./...
