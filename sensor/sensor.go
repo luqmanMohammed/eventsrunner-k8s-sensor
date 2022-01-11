@@ -3,10 +3,12 @@ package sensor
 import (
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/luqmanMohammed/eventsrunner-k8s-sensor/common"
 	"github.com/luqmanMohammed/eventsrunner-k8s-sensor/sensor/rules"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/dynamic/dynamicinformer"
@@ -22,7 +24,7 @@ import (
 type Event struct {
 	EventType rules.EventType
 	Rule      *rules.Rule
-	Objects   []metav1.Object
+	Objects   []*unstructured.Unstructured
 }
 
 // registeredRule is a struct wrapper arround rules.Rule.
@@ -40,8 +42,9 @@ func (rr *registeredRule) startInformer() {
 
 // SensorOpts holds options related to sensor configuration
 type SensorOpts struct {
-	KubeConfig  *rest.Config
-	SensorLabel string
+	KubeConfig                     *rest.Config
+	SensorLabel                    string
+	LoadObjectsDurationBeforeStart time.Duration
 }
 
 // Sensor struct implements kubernetes informers to sense changes
@@ -54,6 +57,7 @@ type Sensor struct {
 	registeredRules  []registeredRule
 	stopChan         chan struct{}
 	lock             sync.Mutex
+	startTime        time.Time
 }
 
 // Creates a new default Sensor. Refer Sensor struct documentation for
@@ -70,6 +74,7 @@ func New(sensorOpts *SensorOpts) *Sensor {
 		registeredRules:  make([]registeredRule, 0),
 		stopChan:         make(chan struct{}),
 		Queue:            workqueue.NewRateLimitingQueue(workqueue.DefaultControllerRateLimiter()),
+		startTime:        time.Now().Add(-sensorOpts.LoadObjectsDurationBeforeStart),
 	}
 }
 
@@ -81,10 +86,14 @@ func (s *Sensor) addFuncWrapper(rule *rules.Rule) func(obj interface{}) {
 	for _, t_eventType := range rule.EventTypes {
 		if t_eventType == rules.ADDED {
 			return func(obj interface{}) {
+				unstructuredObj := obj.(*unstructured.Unstructured)
+				if !unstructuredObj.GetCreationTimestamp().After(s.startTime) {
+					return
+				}
 				s.Queue.Add(&Event{
 					EventType: rules.ADDED,
 					Rule:      rule,
-					Objects:   []metav1.Object{obj.(metav1.Object)},
+					Objects:   []*unstructured.Unstructured{unstructuredObj},
 				})
 			}
 		}
@@ -102,10 +111,18 @@ func (s *Sensor) updateFuncWrapper(rule *rules.Rule) func(obj interface{}, newOb
 	for _, t_eventType := range rule.EventTypes {
 		if t_eventType == rules.MODIFIED {
 			return func(obj interface{}, newObj interface{}) {
+
+				unstructuredObj := obj.(*unstructured.Unstructured)
+				unstructuredNewObj := newObj.(*unstructured.Unstructured)
+
+				if unstructuredNewObj.GetResourceVersion() == unstructuredObj.GetResourceVersion() {
+					return
+				}
+
 				s.Queue.Add(&Event{
 					EventType: rules.MODIFIED,
 					Rule:      rule,
-					Objects:   []metav1.Object{obj.(metav1.Object), newObj.(metav1.Object)},
+					Objects:   []*unstructured.Unstructured{unstructuredObj, unstructuredNewObj},
 				})
 			}
 		}
@@ -125,7 +142,7 @@ func (s *Sensor) deleteFuncWrapper(rule *rules.Rule) func(obj interface{}) {
 				s.Queue.Add(&Event{
 					EventType: rules.DELETED,
 					Rule:      rule,
-					Objects:   []metav1.Object{obj.(metav1.Object)},
+					Objects:   []*unstructured.Unstructured{obj.(*unstructured.Unstructured)},
 				})
 			}
 		}
@@ -214,6 +231,9 @@ func (s *Sensor) Start(sensorRules []*rules.Rule) {
 	for _, rule := range sensorRules {
 		r_rule := s.registerRule(rule)
 		r_rule.startInformer()
+		if !cache.WaitForCacheSync(s.stopChan, r_rule.ruleK8sInformer.Informer().HasSynced) {
+			klog.Fatalf("Error waiting for informer sync for rule %v", rule)
+		}
 		s.registeredRules = append(s.registeredRules, r_rule)
 	}
 	<-s.stopChan
