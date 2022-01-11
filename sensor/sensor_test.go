@@ -3,6 +3,7 @@ package sensor
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -62,6 +63,14 @@ var (
 			EventTypes: []rules.EventType{rules.ADDED, rules.MODIFIED, rules.DELETED},
 		},
 	}
+	rules_cache = []*rules.Rule{
+		{
+			Group:      "apps",
+			APIVersion: "v1",
+			Resource:   "deployments",
+			EventTypes: []rules.EventType{rules.ADDED},
+		},
+	}
 )
 
 func retryFunc(retryFunc func() bool, count int) bool {
@@ -76,6 +85,22 @@ func retryFunc(retryFunc func() bool, count int) bool {
 	return false
 }
 
+func waitStartSensor(t *testing.T, sensor *Sensor, ruleSet []*rules.Rule, waitSecounds int) {
+	if !retryFunc(func() bool {
+		if len(sensor.registeredRules) != len(ruleSet) {
+			return false
+		}
+		if sensor.registeredRules[0].rule.Resource != ruleSet[0].Resource {
+			fmt.Println(len(sensor.registeredRules))
+			return false
+		}
+		return true
+	}, waitSecounds) {
+		t.Error("Failed to start sensor")
+		return
+	}
+}
+
 func setupKubconfig() *rest.Config {
 	if config, err := common.GetKubeAPIConfig(true, ""); err != nil {
 		panic(err)
@@ -87,8 +112,9 @@ func setupKubconfig() *rest.Config {
 func setupSensor() *Sensor {
 	config := setupKubconfig()
 	sensor := New(&SensorOpts{
-		KubeConfig:  config,
-		SensorLabel: "k8s",
+		KubeConfig:                     config,
+		SensorLabel:                    "k8s",
+		LoadObjectsDurationBeforeStart: time.Second * 0,
 	})
 	return sensor
 }
@@ -126,6 +152,31 @@ func checkIfObjectExistsInQueue(retry int, sensor *Sensor, searchObject metav1.O
 	}
 }
 
+func TestCacheSync(t *testing.T) {
+	config := setupKubconfig()
+	sensor := New(&SensorOpts{
+		KubeConfig:  config,
+		SensorLabel: "k8s",
+	})
+	go sensor.Start(rules_cache)
+	defer sensor.Stop()
+	waitStartSensor(t, sensor, rules_cache, 10)
+
+	// Create a pod
+	pod := &v1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "coredns",
+			Namespace: "kube-system",
+		},
+	}
+	switch checkIfObjectExistsInQueue(5, sensor, pod, rules.ADDED) {
+	case nil:
+		t.Errorf("Pod should not be added")
+	case errTimeout, errNotFound:
+		return
+	}
+}
+
 func TestSensorStart(t *testing.T) {
 	config := setupKubconfig()
 	sensor := New(&SensorOpts{
@@ -142,8 +193,15 @@ func TestSensorStart(t *testing.T) {
 
 func TestSensorReload(t *testing.T) {
 	sensor := setupSensor()
+
+	defer func() {
+		kubernetes.NewForConfigOrDie(sensor.KubeConfig).CoreV1().ConfigMaps("kube-system").Delete(context.Background(), "test-configmap", metav1.DeleteOptions{})
+	}()
+
 	go sensor.Start(rules_basic)
+	waitStartSensor(t, sensor, rules_basic, 10)
 	sensor.ReloadRules(rules_reload)
+	waitStartSensor(t, sensor, rules_reload, 10)
 	if len(sensor.registeredRules) != 2 {
 		t.Error("Failed to reload sensor")
 	}
@@ -206,6 +264,10 @@ func TestCRDCompatibility(t *testing.T) {
 		},
 	}
 
+	defer func() {
+		clientapiextv1.NewForConfigOrDie(sensor.KubeConfig).CustomResourceDefinitions().Delete(context.Background(), crd.Name, metav1.DeleteOptions{})
+	}()
+
 	if _, err := clientapiextv1.NewForConfigOrDie(sensor.KubeConfig).CustomResourceDefinitions().Create(context.Background(), &crd, metav1.CreateOptions{}); err != nil {
 		t.Errorf("Failed to create CRD: %v", err)
 		return
@@ -214,6 +276,7 @@ func TestCRDCompatibility(t *testing.T) {
 	time.Sleep(3 * time.Second)
 
 	go sensor.Start(rules_custom)
+	waitStartSensor(t, sensor, rules_custom, 10)
 
 	crdGVR := schema.GroupVersionResource{
 		Group:    "k8ser.io",
@@ -264,25 +327,18 @@ func TestCRDCompatibility(t *testing.T) {
 func TestClusterBoundResourcesComp(t *testing.T) {
 	sensor := setupSensor()
 	go sensor.Start(rules_clusterbound)
-	if !retryFunc(func() bool {
-		if len(sensor.registeredRules) != 1 {
-			t.Logf("Failed to start sensor. Retrying")
-			return false
-		}
-		if sensor.registeredRules[0].rule.Resource != rules_clusterbound[0].Resource {
-			t.Logf("Failed to start sensor. Retrying")
-			return false
-		}
-		return true
-	}, 5) {
-		t.Error("Failed to start sensor")
-	}
+	waitStartSensor(t, sensor, rules_clusterbound, 10)
 
 	ns := &v1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "test-namespace",
 		},
 	}
+
+	defer func() {
+		kubernetes.NewForConfigOrDie(sensor.KubeConfig).CoreV1().Namespaces().Delete(context.Background(), ns.Name, metav1.DeleteOptions{})
+	}()
+
 	nsObj, err := kubernetes.NewForConfigOrDie(sensor.KubeConfig).CoreV1().Namespaces().Create(context.Background(), ns, metav1.CreateOptions{})
 	if err != nil {
 		t.Errorf("Failed to create namespace: %v", err)
