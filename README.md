@@ -1,1 +1,1 @@
-# EK-K8S-SENSOR
+# EventsRunner-K8s-Sensor
