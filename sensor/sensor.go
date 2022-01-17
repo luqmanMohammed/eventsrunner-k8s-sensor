@@ -2,6 +2,7 @@ package sensor
 
 import (
 	"fmt"
+	"reflect"
 	"sync"
 	"time"
 
@@ -119,7 +120,19 @@ func (s *Sensor) updateFuncWrapper(rule *rules.Rule) func(obj interface{}, newOb
 					return
 				}
 
-				fmt.Printf("%+v \n", unstructuredObj)
+				if len(rule.UpdatesOn) > 0 {
+					enqueue := false
+					for _, updateOn := range rule.UpdatesOn {
+						updateOnStr := string(updateOn)
+						if !reflect.DeepEqual(unstructuredObj.Object[updateOnStr], unstructuredNewObj.Object[updateOnStr]) {
+							enqueue = true
+							break
+						}
+					}
+					if !enqueue {
+						return
+					}
+				}
 
 				s.Queue.Add(&Event{
 					EventType: rules.MODIFIED,
@@ -234,10 +247,6 @@ func (s *Sensor) Start(sensorRules []*rules.Rule) {
 	for _, rule := range sensorRules {
 		r_rule := s.registerRule(rule)
 		r_rule.startInformer()
-		// TODO: Remove since cache is not used and timestamp is used to filter out old objects
-		if !cache.WaitForCacheSync(s.stopChan, r_rule.ruleK8sInformer.Informer().HasSynced) {
-			klog.Fatalf("Error waiting for informer sync for rule %v", rule)
-		}
 		s.registeredRules = append(s.registeredRules, r_rule)
 	}
 	<-s.stopChan
