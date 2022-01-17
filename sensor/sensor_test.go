@@ -71,6 +71,14 @@ var (
 			EventTypes: []rules.EventType{rules.ADDED},
 		},
 	}
+	rules_dynamic = []*rules.Rule{
+		{
+			Group:      "",
+			APIVersion: "v1",
+			Resource:   "namespaces",
+			EventTypes: []rules.EventType{rules.MODIFIED},
+		},
+	}
 )
 
 func retryFunc(retryFunc func() bool, count int) bool {
@@ -342,6 +350,7 @@ func TestClusterBoundResourcesComp(t *testing.T) {
 	nsObj, err := kubernetes.NewForConfigOrDie(sensor.KubeConfig).CoreV1().Namespaces().Create(context.Background(), ns, metav1.CreateOptions{})
 	if err != nil {
 		t.Errorf("Failed to create namespace: %v", err)
+		return
 	}
 	switch checkIfObjectExistsInQueue(30, sensor, nsObj, rules.ADDED) {
 	case errNotFound:
@@ -352,5 +361,45 @@ func TestClusterBoundResourcesComp(t *testing.T) {
 }
 
 func TestEventHandlerDynamics(t *testing.T) {
+	sensor := setupSensor()
+	go sensor.Start(rules_dynamic)
+	waitStartSensor(t, sensor, rules_dynamic, 10)
+
+	ns := &v1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test-namespace-2",
+		},
+	}
+
+	defer func() {
+		kubernetes.NewForConfigOrDie(sensor.KubeConfig).CoreV1().Namespaces().Delete(context.Background(), ns.Name, metav1.DeleteOptions{})
+	}()
+
+	nsObj, err := kubernetes.NewForConfigOrDie(sensor.KubeConfig).CoreV1().Namespaces().Create(context.Background(), ns, metav1.CreateOptions{})
+	if err != nil {
+		t.Errorf("Failed to create namespace: %v", err)
+		return
+	}
+
+	switch checkIfObjectExistsInQueue(15, sensor, nsObj, rules.ADDED) {
+	case nil:
+		t.Errorf("Namespace %s ADDED event should not be added to queue", ns.Name)
+		return
+	}
+	ns.ObjectMeta.Labels = map[string]string{
+		"test-label": "test-value",
+	}
+	nsObj, err = kubernetes.NewForConfigOrDie(sensor.KubeConfig).CoreV1().Namespaces().Update(context.Background(), ns, metav1.UpdateOptions{})
+	if err != nil {
+		t.Errorf("Failed to update namespace: %v", err)
+		return
+	}
+	switch checkIfObjectExistsInQueue(30, sensor, nsObj, rules.MODIFIED) {
+	case errNotFound:
+		t.Errorf("Namespace %s MODIFIED event not found in queue", ns.Name)
+		return
+	case errTimeout:
+		t.Errorf("Timeout waiting for Namespace %s MODIFIED event to be added to queue", ns.Name)
+	}
 
 }
