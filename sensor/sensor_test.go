@@ -10,6 +10,7 @@ import (
 	"github.com/luqmanMohammed/eventsrunner-k8s-sensor/common"
 	"github.com/luqmanMohammed/eventsrunner-k8s-sensor/sensor/rules"
 
+	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	clientapiextv1 "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset/typed/apiextensions/v1"
@@ -77,6 +78,22 @@ var (
 			APIVersion: "v1",
 			Resource:   "namespaces",
 			EventTypes: []rules.EventType{rules.MODIFIED},
+		},
+	}
+	rules_object_subset = []*rules.Rule{
+		{
+			Group:      "",
+			APIVersion: "v1",
+			Resource:   "namespaces",
+			EventTypes: []rules.EventType{rules.MODIFIED},
+			UpdatesOn:  []rules.K8sObjectSubset{rules.SPEC},
+		},
+		{
+			Group:      "apps",
+			APIVersion: "v1",
+			Resource:   "deployments",
+			EventTypes: []rules.EventType{rules.MODIFIED},
+			UpdatesOn:  []rules.K8sObjectSubset{rules.SPEC},
 		},
 	}
 )
@@ -160,7 +177,7 @@ func checkIfObjectExistsInQueue(retry int, sensor *Sensor, searchObject metav1.O
 	}
 }
 
-func TestCacheSync(t *testing.T) {
+func TestObjectsCreatedBeforeSensorStartAreNotAdded(t *testing.T) {
 	config := setupKubconfig()
 	sensor := New(&SensorOpts{
 		KubeConfig:  config,
@@ -238,7 +255,7 @@ func TestSensorReload(t *testing.T) {
 	}
 }
 
-func TestCRDCompatibility(t *testing.T) {
+func TestSensorIsWorkingWithCRDs(t *testing.T) {
 	sensor := setupSensor()
 	crd := apiextv1.CustomResourceDefinition{
 		ObjectMeta: metav1.ObjectMeta{
@@ -332,7 +349,7 @@ func TestCRDCompatibility(t *testing.T) {
 	}
 }
 
-func TestClusterBoundResourcesComp(t *testing.T) {
+func TestSensorWorkingWithClusterBoundResources(t *testing.T) {
 	sensor := setupSensor()
 	go sensor.Start(rules_clusterbound)
 	waitStartSensor(t, sensor, rules_clusterbound, 10)
@@ -360,7 +377,7 @@ func TestClusterBoundResourcesComp(t *testing.T) {
 	}
 }
 
-func TestEventHandlerDynamics(t *testing.T) {
+func TestOnlyConfiguredEventListenerIsAdded(t *testing.T) {
 	sensor := setupSensor()
 	go sensor.Start(rules_dynamic)
 	waitStartSensor(t, sensor, rules_dynamic, 10)
@@ -381,7 +398,7 @@ func TestEventHandlerDynamics(t *testing.T) {
 		return
 	}
 
-	switch checkIfObjectExistsInQueue(15, sensor, nsObj, rules.ADDED) {
+	switch checkIfObjectExistsInQueue(10, sensor, nsObj, rules.ADDED) {
 	case nil:
 		t.Errorf("Namespace %s ADDED event should not be added to queue", ns.Name)
 		return
@@ -397,9 +414,98 @@ func TestEventHandlerDynamics(t *testing.T) {
 	switch checkIfObjectExistsInQueue(30, sensor, nsObj, rules.MODIFIED) {
 	case errNotFound:
 		t.Errorf("Namespace %s MODIFIED event not found in queue", ns.Name)
-		return
 	case errTimeout:
 		t.Errorf("Timeout waiting for Namespace %s MODIFIED event to be added to queue", ns.Name)
 	}
+}
 
+func TestEnqueueOnlyOnSpecificK8sObjSubsetUpdate(t *testing.T) {
+	sensor := setupSensor()
+	go sensor.Start(rules_object_subset)
+	waitStartSensor(t, sensor, rules_object_subset, 10)
+
+	ns := &v1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test-namespace-3",
+		},
+	}
+
+	defer func() {
+		kubernetes.NewForConfigOrDie(sensor.KubeConfig).CoreV1().Namespaces().Delete(context.Background(), ns.Name, metav1.DeleteOptions{})
+	}()
+	_, err := kubernetes.NewForConfigOrDie(sensor.KubeConfig).CoreV1().Namespaces().Create(context.Background(), ns, metav1.CreateOptions{})
+	if err != nil {
+		t.Errorf("Failed to create namespace: %v", err)
+		return
+	}
+	ns.ObjectMeta.Labels = map[string]string{
+		"test-label": "test-value",
+	}
+	nsObj, err := kubernetes.NewForConfigOrDie(sensor.KubeConfig).CoreV1().Namespaces().Update(context.Background(), ns, metav1.UpdateOptions{})
+	if err != nil {
+		t.Errorf("Failed to update namespace: %v", err)
+		return
+	}
+	switch checkIfObjectExistsInQueue(10, sensor, nsObj, rules.MODIFIED) {
+	case nil:
+		t.Errorf("Namespace %s Metadata MODIFIED event should not be added to queue", ns.Name)
+	}
+
+	replicas := int32(1)
+	// Create test deployment
+	deployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test-deployment-2",
+		},
+		Spec: appsv1.DeploymentSpec{
+			Replicas: &replicas,
+			Selector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{
+					"test-label": "test-value",
+				},
+			},
+			Template: v1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test-pod-2",
+					Labels: map[string]string{
+						"test-label": "test-value",
+					},
+				},
+				Spec: v1.PodSpec{
+					Containers: []v1.Container{
+						{
+							Name:  "test-container-2",
+							Image: "nginx",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	_, err = kubernetes.NewForConfigOrDie(sensor.KubeConfig).AppsV1().Deployments(ns.Name).Create(context.Background(), deployment, metav1.CreateOptions{})
+	if err != nil {
+		t.Errorf("Failed to create deployment: %v", err)
+		return
+	}
+
+	defer func() {
+		kubernetes.NewForConfigOrDie(sensor.KubeConfig).AppsV1().Deployments(ns.Name).Delete(context.Background(), deployment.Name, metav1.DeleteOptions{})
+	}()
+
+	switch checkIfObjectExistsInQueue(5, sensor, deployment, rules.ADDED) {
+	case nil:
+		t.Errorf("Deployment %s ADDED event should not be added to queue", deployment.Name)
+	}
+
+	deployment.Spec.Template.Spec.Containers[0].Name = "test-container-2-1"
+	deploymentObj, err := kubernetes.NewForConfigOrDie(sensor.KubeConfig).AppsV1().Deployments(ns.Name).Update(context.Background(), deployment, metav1.UpdateOptions{})
+	if err != nil {
+		t.Errorf("Failed to update deployment: %v", err)
+		return
+	}
+	switch checkIfObjectExistsInQueue(5, sensor, deploymentObj, rules.MODIFIED) {
+	case errNotFound, errTimeout:
+		t.Errorf("Deployment %s MODIFIED event not found in queue", deployment.Name)
+	}
 }
