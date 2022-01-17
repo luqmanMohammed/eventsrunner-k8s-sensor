@@ -5,10 +5,16 @@ const (
 	MODIFIED EventType = "MODIFIED"
 	DELETED  EventType = "DELETED"
 	NONE     EventType = "NONE"
+
+	METADATA K8sObjectSubset = "metadata"
+	SPEC     K8sObjectSubset = "spec"
+	STATUS   K8sObjectSubset = "status"
 )
 
 //EventType is used to reperesent the type of event produced by the kubernetes api server
 type EventType string
+
+type K8sObjectSubset string
 
 //Filter will be used to filter specific events based on labels and fields selectors
 //All default kubernetes field selectors should work
@@ -25,4 +31,5 @@ type Rule struct {
 	Resource   string
 	Namespaces []string
 	EventTypes []EventType
+	UpdatesOn  []K8sObjectSubset
 }

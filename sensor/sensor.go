@@ -119,6 +119,8 @@ func (s *Sensor) updateFuncWrapper(rule *rules.Rule) func(obj interface{}, newOb
 					return
 				}
 
+				fmt.Printf("%+v \n", unstructuredObj)
+
 				s.Queue.Add(&Event{
 					EventType: rules.MODIFIED,
 					Rule:      rule,
@@ -156,6 +158,7 @@ func (s *Sensor) deleteFuncWrapper(rule *rules.Rule) func(obj interface{}) {
 // Preps new rules, closes all informers for the existing rules and starts new
 // informers for the new rules.
 // ReloadRules assumes all rules are valid and are unique.
+// TODO: Refactor to reload only affected rules
 func (s *Sensor) ReloadRules(sensorRules []*rules.Rule) {
 	newRegisteredRules := make([]registeredRule, 0)
 	for _, rule := range sensorRules {
@@ -231,6 +234,7 @@ func (s *Sensor) Start(sensorRules []*rules.Rule) {
 	for _, rule := range sensorRules {
 		r_rule := s.registerRule(rule)
 		r_rule.startInformer()
+		// TODO: Remove since cache is not used and timestamp is used to filter out old objects
 		if !cache.WaitForCacheSync(s.stopChan, r_rule.ruleK8sInformer.Informer().HasSynced) {
 			klog.Fatalf("Error waiting for informer sync for rule %v", rule)
 		}
