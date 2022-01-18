@@ -21,15 +21,16 @@ type K8sObjectSubset string
 //Filter will be used to filter specific events based on labels and fields selectors
 //All default kubernetes field selectors should work
 type Filter struct {
-	LabelFilter string `default:""`
-	FieldFilter string `default:""`
+	LabelFilter string `default:"" json:"labelFilter"`
+	FieldFilter string `default:"" json:"fieldFilter"`
 }
 
 //Rule struct is used to represent a rule that will be used to filter events
 type Rule struct {
 	Filter
 	schema.GroupVersionResource
-	Namespaces []string
-	EventTypes []EventType
-	UpdatesOn  []K8sObjectSubset
+	Name       string            `json:"Name"`
+	Namespaces []string          `json:"namespaces"`
+	EventTypes []EventType       `json:"eventTypes"`
+	UpdatesOn  []K8sObjectSubset `json:"updatesOn"`
 }
