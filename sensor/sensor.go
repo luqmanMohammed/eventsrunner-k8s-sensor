@@ -10,7 +10,6 @@ import (
 	"github.com/luqmanMohammed/eventsrunner-k8s-sensor/sensor/rules"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/dynamic/dynamicinformer"
 	"k8s.io/client-go/informers"
@@ -192,11 +191,7 @@ func (s *Sensor) registerRule(rule *rules.Rule) registeredRule {
 
 	dynamicInformer := dynamicinformer.NewFilteredDynamicInformer(
 		s.dynamicClientSet,
-		schema.GroupVersionResource{
-			Group:    rule.Group,
-			Version:  rule.APIVersion,
-			Resource: rule.Resource,
-		},
+		rule.GroupVersionResource,
 		metav1.NamespaceAll,
 		0,
 		cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc},

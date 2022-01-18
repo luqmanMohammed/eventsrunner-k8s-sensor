@@ -25,73 +25,91 @@ import (
 var (
 	rules_basic = []*rules.Rule{
 		{
-			Group:      "",
-			APIVersion: "v1",
-			Resource:   "pods",
+			GroupVersionResource: schema.GroupVersionResource{
+				Group:    "",
+				Version:  "v1",
+				Resource: "pods",
+			},
 			EventTypes: []rules.EventType{rules.ADDED, rules.MODIFIED, rules.DELETED},
 			Namespaces: []string{"default"},
 		},
 	}
 	rules_reload = []*rules.Rule{
 		{
-			Group:      "",
-			APIVersion: "v1",
-			Resource:   "pods",
+			GroupVersionResource: schema.GroupVersionResource{
+				Group:    "",
+				Version:  "v1",
+				Resource: "pods",
+			},
 			EventTypes: []rules.EventType{rules.ADDED},
 		},
 		{
-			Group:      "",
-			APIVersion: "v1",
-			Resource:   "configmaps",
+			GroupVersionResource: schema.GroupVersionResource{
+				Group:    "",
+				Version:  "v1",
+				Resource: "configmaps",
+			},
 			Namespaces: []string{"kube-system"},
 			EventTypes: []rules.EventType{rules.ADDED},
 		},
 	}
 	rules_custom = []*rules.Rule{
 		{
-			Group:      "k8ser.io",
-			APIVersion: "v1",
-			Resource:   "ercrds",
+			GroupVersionResource: schema.GroupVersionResource{
+				Group:    "k8ser.io",
+				Version:  "v1",
+				Resource: "ercrds",
+			},
 			Namespaces: []string{"default"},
 			EventTypes: []rules.EventType{rules.ADDED, rules.MODIFIED},
 		},
 	}
 	rules_clusterbound = []*rules.Rule{
 		{
-			Group:      "",
-			APIVersion: "v1",
-			Resource:   "namespaces",
+			GroupVersionResource: schema.GroupVersionResource{
+				Group:    "",
+				Version:  "v1",
+				Resource: "namespaces",
+			},
 			EventTypes: []rules.EventType{rules.ADDED, rules.MODIFIED, rules.DELETED},
 		},
 	}
 	rules_cache = []*rules.Rule{
 		{
-			Group:      "apps",
-			APIVersion: "v1",
-			Resource:   "deployments",
+			GroupVersionResource: schema.GroupVersionResource{
+				Group:    "apps",
+				Version:  "v1",
+				Resource: "deployments",
+			},
 			EventTypes: []rules.EventType{rules.ADDED},
 		},
 	}
 	rules_dynamic = []*rules.Rule{
 		{
-			Group:      "",
-			APIVersion: "v1",
-			Resource:   "namespaces",
+			GroupVersionResource: schema.GroupVersionResource{
+				Group:    "",
+				Version:  "v1",
+				Resource: "namespaces",
+			},
 			EventTypes: []rules.EventType{rules.MODIFIED},
 		},
 	}
 	rules_object_subset = []*rules.Rule{
 		{
-			Group:      "",
-			APIVersion: "v1",
-			Resource:   "namespaces",
+			GroupVersionResource: schema.GroupVersionResource{
+				Group:    "",
+				Version:  "v1",
+				Resource: "namespaces",
+			},
 			EventTypes: []rules.EventType{rules.MODIFIED},
 			UpdatesOn:  []rules.K8sObjectSubset{rules.SPEC},
 		},
 		{
-			Group:      "apps",
-			APIVersion: "v1",
-			Resource:   "deployments",
+			GroupVersionResource: schema.GroupVersionResource{
+				Group:    "apps",
+				Version:  "v1",
+				Resource: "deployments",
+			},
 			EventTypes: []rules.EventType{rules.MODIFIED},
 			UpdatesOn:  []rules.K8sObjectSubset{rules.SPEC},
 		},
