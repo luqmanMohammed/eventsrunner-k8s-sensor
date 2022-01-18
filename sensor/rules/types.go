@@ -1,5 +1,7 @@
 package rules
 
+import "k8s.io/apimachinery/pkg/runtime/schema"
+
 const (
 	ADDED    EventType = "ADDED"
 	MODIFIED EventType = "MODIFIED"
@@ -26,9 +28,7 @@ type Filter struct {
 //Rule struct is used to represent a rule that will be used to filter events
 type Rule struct {
 	Filter
-	Group      string
-	APIVersion string
-	Resource   string
+	schema.GroupVersionResource
 	Namespaces []string
 	EventTypes []EventType
 	UpdatesOn  []K8sObjectSubset
