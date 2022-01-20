@@ -240,44 +240,45 @@ func TestSensorStart(t *testing.T) {
 	}
 }
 
-// func TestSensorReload(t *testing.T) {
-// 	sensor := setupSensor()
+// TODO: Improve test
+func TestSensorReload(t *testing.T) {
+	sensor := setupSensor()
 
-// 	defer func() {
-// 		kubernetes.NewForConfigOrDie(sensor.KubeConfig).CoreV1().ConfigMaps("kube-system").Delete(context.Background(), "test-configmap", metav1.DeleteOptions{})
-// 	}()
+	defer func() {
+		kubernetes.NewForConfigOrDie(sensor.KubeConfig).CoreV1().ConfigMaps("kube-system").Delete(context.Background(), "test-configmap", metav1.DeleteOptions{})
+	}()
 
-// 	go sensor.Start(rules_basic)
-// 	waitStartSensor(t, sensor, rules_basic, 10)
-// 	sensor.ReloadRules(rules_reload)
-// 	waitStartSensor(t, sensor, rules_reload, 10)
-// 	if len(sensor.ruleInformers) != 2 {
-// 		t.Error("Failed to reload sensor")
-// 	}
-// 	if len(sensor.ruleInformers[0].rule.EventTypes) != 1 {
-// 		t.Error("New rules are not correctly loaded")
-// 	}
-// 	if sensor.ruleInformers[1].rule.Resource != rules_reload[1].Resource {
-// 		t.Error("New rules not correctly loaded")
-// 	}
-// 	configmap := &v1.ConfigMap{
-// 		ObjectMeta: metav1.ObjectMeta{
-// 			Name:      "test-configmap",
-// 			Namespace: "kube-system",
-// 		},
-// 	}
-// 	test_configmap, err := kubernetes.NewForConfigOrDie(sensor.KubeConfig).CoreV1().ConfigMaps("kube-system").Create(context.Background(), configmap, metav1.CreateOptions{})
-// 	if err != nil {
-// 		t.Errorf("Failed to create configmap: %v", err)
-// 		return
-// 	}
-// 	switch checkIfObjectExistsInQueue(30, sensor, test_configmap, rules.ADDED) {
-// 	case errNotFound:
-// 		t.Error("Configmap not found in queue")
-// 	case errTimeout:
-// 		t.Error("Timeout waiting for configmap to be added to queue")
-// 	}
-// }
+	go sensor.Start(rules_basic)
+	waitStartSensor(t, sensor, rules_basic, 10)
+	sensor.ReloadRules(rules_reload)
+	waitStartSensor(t, sensor, rules_reload, 10)
+	if len(sensor.ruleInformers) != 2 {
+		t.Error("Failed to reload sensor")
+	}
+	if len(sensor.ruleInformers["test-rule-1"].rule.EventTypes) != 1 {
+		t.Error("New rules are not correctly loaded")
+	}
+	if sensor.ruleInformers["test-rule-2"].rule.Resource != rules_reload["test-rule-2"].Resource {
+		t.Error("New rules not correctly loaded")
+	}
+	configmap := &v1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-configmap",
+			Namespace: "kube-system",
+		},
+	}
+	test_configmap, err := kubernetes.NewForConfigOrDie(sensor.KubeConfig).CoreV1().ConfigMaps("kube-system").Create(context.Background(), configmap, metav1.CreateOptions{})
+	if err != nil {
+		t.Errorf("Failed to create configmap: %v", err)
+		return
+	}
+	switch checkIfObjectExistsInQueue(30, sensor, test_configmap, rules.ADDED) {
+	case errNotFound:
+		t.Error("Configmap not found in queue")
+	case errTimeout:
+		t.Error("Timeout waiting for configmap to be added to queue")
+	}
+}
 
 func TestSensorIsWorkingWithCRDs(t *testing.T) {
 	sensor := setupSensor()

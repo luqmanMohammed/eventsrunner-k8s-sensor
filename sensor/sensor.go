@@ -32,13 +32,13 @@ type Event struct {
 type ruleInformer struct {
 	rule              *rules.Rule
 	informerStartTime time.Time
-	ruleK8sInformer   informers.GenericInformer
+	informer          informers.GenericInformer
 	stopChan          chan struct{}
 }
 
 // startInformer starts the informer for a specific rule.
 func (rr *ruleInformer) startInformer() {
-	go rr.ruleK8sInformer.Informer().Run(rr.stopChan)
+	go rr.informer.Informer().Run(rr.stopChan)
 }
 
 // SensorOpts holds options related to sensor configuration
@@ -83,23 +83,23 @@ func New(sensorOpts *SensorOpts) *Sensor {
 // function without affecting its signature.
 // Makes event handler addition dynamic based on the rules by returning nil if
 // ADDED event type is not configured for a specific rule.
-func (s *Sensor) addFuncWrapper(rule *rules.Rule) func(obj interface{}) {
-	for _, t_eventType := range rule.EventTypes {
+func (s *Sensor) addFuncWrapper(ruleInf *ruleInformer) func(obj interface{}) {
+	for _, t_eventType := range ruleInf.rule.EventTypes {
 		if t_eventType == rules.ADDED {
 			return func(obj interface{}) {
 				unstructuredObj := obj.(*unstructured.Unstructured)
-				if !unstructuredObj.GetCreationTimestamp().After(s.startTime) {
+				if !unstructuredObj.GetCreationTimestamp().After(ruleInf.informerStartTime) {
 					return
 				}
 				s.Queue.Add(&Event{
 					EventType: rules.ADDED,
-					RuleID:    rule.ID,
+					RuleID:    ruleInf.rule.ID,
 					Objects:   []*unstructured.Unstructured{unstructuredObj},
 				})
 			}
 		}
 	}
-	klog.V(4).Infof("ADDED event type is not configured for rule %v", rule)
+	klog.V(4).Infof("ADDED event type is not configured for rule %v", ruleInf.rule.ID)
 	return nil
 }
 
@@ -108,8 +108,8 @@ func (s *Sensor) addFuncWrapper(rule *rules.Rule) func(obj interface{}) {
 // Makes event handler addition dynamic based on the rules by returning nil if
 // MODIFIED event type is not configured for a specific rule.
 // Old object is stored as primary at index 0 and new object as secoundry at index 1.
-func (s *Sensor) updateFuncWrapper(rule *rules.Rule) func(obj interface{}, newObj interface{}) {
-	for _, t_eventType := range rule.EventTypes {
+func (s *Sensor) updateFuncWrapper(ruleInf *ruleInformer) func(obj interface{}, newObj interface{}) {
+	for _, t_eventType := range ruleInf.rule.EventTypes {
 		if t_eventType == rules.MODIFIED {
 			return func(obj interface{}, newObj interface{}) {
 
@@ -120,9 +120,9 @@ func (s *Sensor) updateFuncWrapper(rule *rules.Rule) func(obj interface{}, newOb
 					return
 				}
 
-				if len(rule.UpdatesOn) > 0 {
+				if len(ruleInf.rule.UpdatesOn) > 0 {
 					enqueue := false
-					for _, updateOn := range rule.UpdatesOn {
+					for _, updateOn := range ruleInf.rule.UpdatesOn {
 						updateOnStr := string(updateOn)
 						if !reflect.DeepEqual(unstructuredObj.Object[updateOnStr], unstructuredNewObj.Object[updateOnStr]) {
 							enqueue = true
@@ -136,13 +136,13 @@ func (s *Sensor) updateFuncWrapper(rule *rules.Rule) func(obj interface{}, newOb
 
 				s.Queue.Add(&Event{
 					EventType: rules.MODIFIED,
-					RuleID:    rule.ID,
+					RuleID:    ruleInf.rule.ID,
 					Objects:   []*unstructured.Unstructured{unstructuredObj, unstructuredNewObj},
 				})
 			}
 		}
 	}
-	klog.V(4).Infof("MODIFIED event type is not configured for rule %v", rule)
+	klog.V(4).Infof("MODIFIED event type is not configured for rule %v", ruleInf.rule.ID)
 	return nil
 }
 
@@ -150,19 +150,19 @@ func (s *Sensor) updateFuncWrapper(rule *rules.Rule) func(obj interface{}, newOb
 // function without affecting its signature.
 // Makes event handler addition dynamic based on the rules by returning nil if
 // DELETED event type is not configured for a specific rule.
-func (s *Sensor) deleteFuncWrapper(rule *rules.Rule) func(obj interface{}) {
-	for _, t_eventType := range rule.EventTypes {
+func (s *Sensor) deleteFuncWrapper(ruleInf *ruleInformer) func(obj interface{}) {
+	for _, t_eventType := range ruleInf.rule.EventTypes {
 		if t_eventType == rules.DELETED {
 			return func(obj interface{}) {
 				s.Queue.Add(&Event{
 					EventType: rules.DELETED,
-					RuleID:    rule.ID,
+					RuleID:    ruleInf.rule.ID,
 					Objects:   []*unstructured.Unstructured{obj.(*unstructured.Unstructured)},
 				})
 			}
 		}
 	}
-	klog.V(4).Infof("DELETED event type is not configured for rule %v", rule)
+	klog.V(4).Infof("DELETED event type is not configured for rule %v", ruleInf.rule.ID)
 	return nil
 }
 
@@ -171,21 +171,28 @@ func (s *Sensor) deleteFuncWrapper(rule *rules.Rule) func(obj interface{}) {
 // Preps new rules, closes all informers for the existing rules and starts new
 // informers for the new rules.
 // ReloadRules assumes all rules are valid and are unique.
-// TODO: Refactor to reload only affected rules
 func (s *Sensor) ReloadRules(sensorRules map[rules.RuleID]*rules.Rule) {
-	// newRegisteredRules := make([]registeredRule, 0)
-	// for _, rule := range sensorRules {
-	// 	newRegisteredRules = append(newRegisteredRules, s.registerRule(rule))
-	// }
-	// defer s.lock.Unlock()
-	// s.lock.Lock()
-	// for _, rule := range s.registeredRules {
-	// 	close(rule.stopChan)
-	// }
-	// for _, rule := range newRegisteredRules {
-	// 	rule.startInformer()
-	// }
-	// s.registeredRules = newRegisteredRules
+	s.lock.Lock()
+	defer s.lock.Unlock()
+	for newRuleId, newRule := range sensorRules {
+		if oldRuleInformer, ok := s.ruleInformers[newRuleId]; !ok {
+			ruleInf := s.registerInformerForRule(newRule)
+			s.ruleInformers[newRuleId] = ruleInf
+			ruleInf.startInformer()
+		} else {
+			if &newRule != &oldRuleInformer.rule {
+				close(oldRuleInformer.stopChan)
+				ruleInf := s.registerInformerForRule(newRule)
+				s.ruleInformers[newRuleId] = ruleInf
+			}
+		}
+	}
+	for oldRuleId, oldRuleInformer := range s.ruleInformers {
+		if _, ok := sensorRules[oldRuleId]; !ok {
+			close(oldRuleInformer.stopChan)
+			delete(s.ruleInformers, oldRuleId)
+		}
+	}
 }
 
 func (s *Sensor) registerInformerForRule(rule *rules.Rule) *ruleInformer {
@@ -205,11 +212,19 @@ func (s *Sensor) registerInformerForRule(rule *rules.Rule) *ruleInformer {
 			options.FieldSelector = rule.FieldFilter
 		}))
 
-	klog.V(3).Infof("Registering event handler for rule %v", rule)
+	klog.V(3).Infof("Registering event handler for rule %v", rule.ID)
+
+	ruleStopChan := make(chan struct{})
+	ruleInformer := &ruleInformer{
+		rule:              rule,
+		informer:          dynamicInformer,
+		stopChan:          ruleStopChan,
+		informerStartTime: time.Now(),
+	}
 
 	dynamicInformer.Informer().AddEventHandler(cache.FilteringResourceEventHandler{
 		FilterFunc: func(obj interface{}) bool {
-			klog.V(5).Infof("FilterFunc called for rule %v with object %v", rule, obj)
+			klog.V(5).Infof("FilterFunc called for rule %v with object %v", rule.ID, obj)
 			meta, ok := obj.(metav1.Object)
 			if !ok {
 				return false
@@ -220,18 +235,13 @@ func (s *Sensor) registerInformerForRule(rule *rules.Rule) *ruleInformer {
 			return true
 		},
 		Handler: cache.ResourceEventHandlerFuncs{
-			AddFunc:    s.addFuncWrapper(rule),
-			UpdateFunc: s.updateFuncWrapper(rule),
-			DeleteFunc: s.deleteFuncWrapper(rule),
+			AddFunc:    s.addFuncWrapper(ruleInformer),
+			UpdateFunc: s.updateFuncWrapper(ruleInformer),
+			DeleteFunc: s.deleteFuncWrapper(ruleInformer),
 		},
 	})
-	klog.V(2).Infof("Registered Informers for rule %v", rule)
-	ruleStopChan := make(chan struct{})
-	return &ruleInformer{
-		rule:            rule,
-		stopChan:        ruleStopChan,
-		ruleK8sInformer: dynamicInformer,
-	}
+	klog.V(2).Infof("Registered Informers for rule %v", rule.ID)
+	return ruleInformer
 }
 
 // Start starts the sensor. It will start all informers and register event handlers
@@ -253,8 +263,8 @@ func (s *Sensor) Start(sensorRules map[rules.RuleID]*rules.Rule) {
 // Stop will release Start call.
 func (s *Sensor) Stop() {
 	klog.V(1).Info("Stopping sensor")
-	for _, rRule := range s.ruleInformers {
-		close(rRule.stopChan)
+	for _, ruleInf := range s.ruleInformers {
+		close(ruleInf.stopChan)
 	}
 	close(s.stopChan)
 }
