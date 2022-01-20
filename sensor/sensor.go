@@ -23,20 +23,21 @@ import (
 // TODO: Move to another package
 type Event struct {
 	EventType rules.EventType
-	Rule      *rules.Rule
+	RuleID    rules.RuleID
 	Objects   []*unstructured.Unstructured
 }
 
 // registeredRule is a struct wrapper arround rules.Rule.
 // It holds required rule management objects.
-type registeredRule struct {
-	rule            *rules.Rule
-	ruleK8sInformer informers.GenericInformer
-	stopChan        chan struct{}
+type ruleInformer struct {
+	rule              *rules.Rule
+	informerStartTime time.Time
+	ruleK8sInformer   informers.GenericInformer
+	stopChan          chan struct{}
 }
 
 // startInformer starts the informer for a specific rule.
-func (rr *registeredRule) startInformer() {
+func (rr *ruleInformer) startInformer() {
 	go rr.ruleK8sInformer.Informer().Run(rr.stopChan)
 }
 
@@ -54,7 +55,7 @@ type Sensor struct {
 	*SensorOpts
 	dynamicClientSet dynamic.Interface
 	Queue            workqueue.RateLimitingInterface
-	registeredRules  []registeredRule
+	ruleInformers    map[rules.RuleID]*ruleInformer
 	stopChan         chan struct{}
 	lock             sync.Mutex
 	startTime        time.Time
@@ -71,7 +72,7 @@ func New(sensorOpts *SensorOpts) *Sensor {
 	return &Sensor{
 		SensorOpts:       sensorOpts,
 		dynamicClientSet: dynamicClientSet,
-		registeredRules:  make([]registeredRule, 0),
+		ruleInformers:    make(map[rules.RuleID]*ruleInformer),
 		stopChan:         make(chan struct{}),
 		Queue:            workqueue.NewRateLimitingQueue(workqueue.DefaultControllerRateLimiter()),
 		startTime:        time.Now().Add(-sensorOpts.LoadObjectsDurationBeforeStart),
@@ -92,7 +93,7 @@ func (s *Sensor) addFuncWrapper(rule *rules.Rule) func(obj interface{}) {
 				}
 				s.Queue.Add(&Event{
 					EventType: rules.ADDED,
-					Rule:      rule,
+					RuleID:    rule.ID,
 					Objects:   []*unstructured.Unstructured{unstructuredObj},
 				})
 			}
@@ -135,7 +136,7 @@ func (s *Sensor) updateFuncWrapper(rule *rules.Rule) func(obj interface{}, newOb
 
 				s.Queue.Add(&Event{
 					EventType: rules.MODIFIED,
-					Rule:      rule,
+					RuleID:    rule.ID,
 					Objects:   []*unstructured.Unstructured{unstructuredObj, unstructuredNewObj},
 				})
 			}
@@ -155,7 +156,7 @@ func (s *Sensor) deleteFuncWrapper(rule *rules.Rule) func(obj interface{}) {
 			return func(obj interface{}) {
 				s.Queue.Add(&Event{
 					EventType: rules.DELETED,
-					Rule:      rule,
+					RuleID:    rule.ID,
 					Objects:   []*unstructured.Unstructured{obj.(*unstructured.Unstructured)},
 				})
 			}
@@ -171,23 +172,23 @@ func (s *Sensor) deleteFuncWrapper(rule *rules.Rule) func(obj interface{}) {
 // informers for the new rules.
 // ReloadRules assumes all rules are valid and are unique.
 // TODO: Refactor to reload only affected rules
-func (s *Sensor) ReloadRules(sensorRules []*rules.Rule) {
-	newRegisteredRules := make([]registeredRule, 0)
-	for _, rule := range sensorRules {
-		newRegisteredRules = append(newRegisteredRules, s.registerRule(rule))
-	}
-	defer s.lock.Unlock()
-	s.lock.Lock()
-	for _, rule := range s.registeredRules {
-		close(rule.stopChan)
-	}
-	for _, rule := range newRegisteredRules {
-		rule.startInformer()
-	}
-	s.registeredRules = newRegisteredRules
+func (s *Sensor) ReloadRules(sensorRules map[rules.RuleID]*rules.Rule) {
+	// newRegisteredRules := make([]registeredRule, 0)
+	// for _, rule := range sensorRules {
+	// 	newRegisteredRules = append(newRegisteredRules, s.registerRule(rule))
+	// }
+	// defer s.lock.Unlock()
+	// s.lock.Lock()
+	// for _, rule := range s.registeredRules {
+	// 	close(rule.stopChan)
+	// }
+	// for _, rule := range newRegisteredRules {
+	// 	rule.startInformer()
+	// }
+	// s.registeredRules = newRegisteredRules
 }
 
-func (s *Sensor) registerRule(rule *rules.Rule) registeredRule {
+func (s *Sensor) registerInformerForRule(rule *rules.Rule) *ruleInformer {
 
 	dynamicInformer := dynamicinformer.NewFilteredDynamicInformer(
 		s.dynamicClientSet,
@@ -226,7 +227,7 @@ func (s *Sensor) registerRule(rule *rules.Rule) registeredRule {
 	})
 	klog.V(2).Infof("Registered Informers for rule %v", rule)
 	ruleStopChan := make(chan struct{})
-	return registeredRule{
+	return &ruleInformer{
 		rule:            rule,
 		stopChan:        ruleStopChan,
 		ruleK8sInformer: dynamicInformer,
@@ -237,12 +238,12 @@ func (s *Sensor) registerRule(rule *rules.Rule) registeredRule {
 // and filters based on the rules.
 // Start wont validate rules for unniqness.
 // Start is a blocking call.
-func (s *Sensor) Start(sensorRules []*rules.Rule) {
+func (s *Sensor) Start(sensorRules map[rules.RuleID]*rules.Rule) {
 	klog.V(1).Info("Starting sensor")
-	for _, rule := range sensorRules {
-		r_rule := s.registerRule(rule)
-		r_rule.startInformer()
-		s.registeredRules = append(s.registeredRules, r_rule)
+	for ruleID, rule := range sensorRules {
+		ruleInformer := s.registerInformerForRule(rule)
+		ruleInformer.startInformer()
+		s.ruleInformers[ruleID] = ruleInformer
 	}
 	<-s.stopChan
 }
@@ -252,7 +253,7 @@ func (s *Sensor) Start(sensorRules []*rules.Rule) {
 // Stop will release Start call.
 func (s *Sensor) Stop() {
 	klog.V(1).Info("Stopping sensor")
-	for _, rRule := range s.registeredRules {
+	for _, rRule := range s.ruleInformers {
 		close(rRule.stopChan)
 	}
 	close(s.stopChan)

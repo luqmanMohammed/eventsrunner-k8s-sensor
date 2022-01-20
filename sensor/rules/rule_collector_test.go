@@ -14,7 +14,7 @@ import (
 var (
 	exampleBasicRuleStr = `
 	[{
-		"name": "basic-pod-rule",
+		id": "basic-pod-rule",
 		"group": "",
 		"version": "v1",
 		"resource": "pods",
@@ -23,18 +23,18 @@ var (
 	`
 	exampleBasicRule2Str = `
 	[{
-		"name": "basic-configmap-rule",
+		"id": "basic-configmap-rule",
 		"group": "",
 		"version": "v1",
 		"resource": "configmaps",
 		"namespaces": ["default"]
 	},{
-		"name": "basic-namespace-rule",
+		"id": "basic-namespace-rule",
 		"group": "",
 		"version": "v1",
 		"resource": "namespaces"
 	},{
-		"name": "basic-pod-rule",
+		"id": "basic-pod-rule",
 		"group": "",
 		"version": "v1",
 		"resource": "pods",

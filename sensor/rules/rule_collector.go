@@ -23,7 +23,7 @@ type ConfigMapRuleCollector struct {
 
 func (cmrc ConfigMapRuleCollector) Collect(ctx context.Context) ([]*Rule, error) {
 	rules := []*Rule{}
-	ruleSet := map[string]struct{}{}
+	ruleSet := map[RuleID]struct{}{}
 	cmList, err := cmrc.clientSet.CoreV1().ConfigMaps(cmrc.sensorNamespace).List(ctx, metav1.ListOptions{
 		LabelSelector: cmrc.sensorRuleConfigMapLabel,
 	})
@@ -37,12 +37,12 @@ func (cmrc ConfigMapRuleCollector) Collect(ctx context.Context) ([]*Rule, error)
 			continue
 		}
 		for _, rule := range tmpRules {
-			if rule.Name == "" {
+			if rule.ID == "" {
 				continue
 			}
-			if _, ok := ruleSet[rule.Name]; !ok {
+			if _, ok := ruleSet[rule.ID]; !ok {
 				rules = append(rules, rule)
-				ruleSet[rule.Name] = struct{}{}
+				ruleSet[rule.ID] = struct{}{}
 			}
 		}
 	}
