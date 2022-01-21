@@ -12,8 +12,6 @@ const (
 // EventType is used to reperesent the type of event produced by the kubernetes api server
 type EventType string
 
-type K8sObjectSubset string
-
 // Filter will be used to filter specific events based on labels and fields selectors
 // All default kubernetes field selectors should work
 type Filter struct {
@@ -28,8 +26,8 @@ type RuleID string
 type Rule struct {
 	Filter
 	schema.GroupVersionResource
-	ID         RuleID            `json:"id"`
-	Namespaces []string          `json:"namespaces"`
-	EventTypes []EventType       `json:"eventTypes"`
-	UpdatesOn  []K8sObjectSubset `json:"updatesOn"`
+	ID         RuleID      `json:"id"`
+	Namespaces []string    `json:"namespaces"`
+	EventTypes []EventType `json:"eventTypes"`
+	UpdatesOn  []string    `json:"updatesOn"`
 }

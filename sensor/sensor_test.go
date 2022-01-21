@@ -145,7 +145,7 @@ var (
 				Resource: "namespaces",
 			},
 			EventTypes: []rules.EventType{rules.MODIFIED},
-			UpdatesOn:  []rules.K8sObjectSubset{"spec"},
+			UpdatesOn:  []string{"spec"},
 		},
 		"test-rule-2": {
 			GroupVersionResource: schema.GroupVersionResource{
@@ -154,7 +154,7 @@ var (
 				Resource: "deployments",
 			},
 			EventTypes: []rules.EventType{rules.MODIFIED},
-			UpdatesOn:  []rules.K8sObjectSubset{"metadata"},
+			UpdatesOn:  []string{"metadata"},
 		},
 	}
 )
