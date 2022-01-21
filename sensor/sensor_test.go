@@ -34,7 +34,16 @@ var (
 			Namespaces: []string{"default"},
 		},
 	}
-	rules_reload = map[rules.RuleID]*rules.Rule{
+	rules_pre_reload = map[rules.RuleID]*rules.Rule{
+		"test-rule-0": {
+			ID: "test-rule-0",
+			GroupVersionResource: schema.GroupVersionResource{
+				Group:    "",
+				Version:  "v1",
+				Resource: "services",
+			},
+			EventTypes: []rules.EventType{rules.ADDED},
+		},
 		"test-rule-1": {
 			ID: "test-rule-1",
 			GroupVersionResource: schema.GroupVersionResource{
@@ -49,10 +58,39 @@ var (
 			GroupVersionResource: schema.GroupVersionResource{
 				Group:    "",
 				Version:  "v1",
+				Resource: "namespaces",
+			},
+			EventTypes: []rules.EventType{rules.ADDED},
+		},
+	}
+	rules_reload = map[rules.RuleID]*rules.Rule{
+		"test-rule-0": {
+			ID: "test-rule-0",
+			GroupVersionResource: schema.GroupVersionResource{
+				Group:    "",
+				Version:  "v1",
+				Resource: "services",
+			},
+			EventTypes: []rules.EventType{rules.ADDED},
+		},
+		"test-rule-1": {
+			ID: "test-rule-1",
+			GroupVersionResource: schema.GroupVersionResource{
+				Group:    "",
+				Version:  "v1",
+				Resource: "pods",
+			},
+			EventTypes: []rules.EventType{rules.ADDED, rules.MODIFIED},
+		},
+		"test-rule-x": {
+			ID: "test-rule-x",
+			GroupVersionResource: schema.GroupVersionResource{
+				Group:    "",
+				Version:  "v1",
 				Resource: "configmaps",
 			},
-			Namespaces: []string{"kube-system"},
 			EventTypes: []rules.EventType{rules.ADDED},
+			Namespaces: []string{"default"},
 		},
 	}
 	rules_custom = map[rules.RuleID]*rules.Rule{
@@ -201,6 +239,106 @@ func checkIfObjectExistsInQueue(retry int, sensor *Sensor, searchObject metav1.O
 	}
 }
 
+func TestSensorStart(t *testing.T) {
+	config := setupKubconfig()
+	sensor := New(&SensorOpts{
+		KubeConfig:  config,
+		SensorLabel: "k8s",
+	})
+	go sensor.Start(rules_basic)
+	defer sensor.Stop()
+	time.Sleep(3 * time.Second)
+	if len(sensor.ruleInformers) != 1 {
+		t.Error("Failed to start sensor")
+	}
+}
+
+func TestSensorReload(t *testing.T) {
+	sensor := setupSensor()
+	go sensor.Start(rules_pre_reload)
+	waitStartSensor(t, sensor, rules_pre_reload, 10)
+
+	for ruleID := range rules_pre_reload {
+		if _, ok := sensor.ruleInformers[ruleID]; !ok {
+			t.Errorf("Rule %s should be added", ruleID)
+		}
+	}
+
+	rule1StartTime := sensor.ruleInformers["test-rule-0"].informerStartTime
+	sensor.ReloadRules(rules_reload)
+	waitStartSensor(t, sensor, rules_reload, 10)
+
+	if len(rules_reload) != len(sensor.ruleInformers) {
+		t.Error("Rules not reloaded properly")
+	}
+	if _, ok := sensor.ruleInformers["test-rule-2"]; ok {
+		t.Error("test-rule-2 should be removed")
+	}
+	if rule1Inf, ok := sensor.ruleInformers["test-rule-1"]; !ok {
+		t.Error("test-rule-1 should be added")
+	} else {
+		if rule1Inf.rule.EventTypes[0] != rules.ADDED {
+			t.Error("test-rule-1 has not been properly updated")
+		}
+		if rule1Inf.rule.EventTypes[1] != rules.MODIFIED {
+			t.Error("test-rule-1 has not been properly updated")
+		}
+	}
+	if rule1StartTime != sensor.ruleInformers["test-rule-0"].informerStartTime {
+		t.Error("test-rule-0 should not be touched")
+	}
+
+	time.Sleep(1 * time.Second)
+
+	configMap := &v1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-configmap",
+			Namespace: "default",
+		},
+	}
+	_, err := kubernetes.NewForConfigOrDie(sensor.KubeConfig).CoreV1().ConfigMaps("default").Create(context.Background(), configMap, metav1.CreateOptions{})
+	if err != nil {
+		t.Fatalf("Failed to create configmap: %s", err)
+	}
+	defer func() {
+		kubernetes.NewForConfigOrDie(sensor.KubeConfig).CoreV1().ConfigMaps("default").Delete(context.Background(), configMap.Name, metav1.DeleteOptions{})
+	}()
+	switch err := checkIfObjectExistsInQueue(15, sensor, configMap, rules.ADDED); err {
+	case errNotFound:
+		t.Error("Configmap should be added to queue")
+	case errTimeout:
+		t.Error("Timeout waiting for configmap to be added to queue")
+	}
+
+	pod := &v1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-pod",
+			Namespace: "default",
+		},
+		Spec: v1.PodSpec{
+			Containers: []v1.Container{
+				{
+					Name:  "test-container",
+					Image: "test-image",
+				},
+			},
+		},
+	}
+	_, err = kubernetes.NewForConfigOrDie(sensor.KubeConfig).CoreV1().Pods("default").Create(context.Background(), pod, metav1.CreateOptions{})
+	if err != nil {
+		t.Fatalf("Failed to create pod: %s", err)
+	}
+	defer func() {
+		kubernetes.NewForConfigOrDie(sensor.KubeConfig).CoreV1().Pods("default").Delete(context.Background(), pod.Name, metav1.DeleteOptions{})
+	}()
+	switch err := checkIfObjectExistsInQueue(15, sensor, pod, rules.ADDED); err {
+	case errNotFound:
+		t.Error("Pod should be added to queue")
+	case errTimeout:
+		t.Error("Timeout waiting for pod to be added to queue")
+	}
+}
+
 func TestObjectsCreatedBeforeSensorStartAreNotAdded(t *testing.T) {
 	config := setupKubconfig()
 	sensor := New(&SensorOpts{
@@ -221,62 +359,6 @@ func TestObjectsCreatedBeforeSensorStartAreNotAdded(t *testing.T) {
 	switch checkIfObjectExistsInQueue(5, sensor, pod, rules.ADDED) {
 	case nil:
 		t.Errorf("Pod should not be added")
-	case errTimeout, errNotFound:
-		return
-	}
-}
-
-func TestSensorStart(t *testing.T) {
-	config := setupKubconfig()
-	sensor := New(&SensorOpts{
-		KubeConfig:  config,
-		SensorLabel: "k8s",
-	})
-	go sensor.Start(rules_basic)
-	defer sensor.Stop()
-	time.Sleep(3 * time.Second)
-	if len(sensor.ruleInformers) != 1 {
-		t.Error("Failed to start sensor")
-	}
-}
-
-// TODO: Improve test
-func TestSensorReload(t *testing.T) {
-	sensor := setupSensor()
-
-	defer func() {
-		kubernetes.NewForConfigOrDie(sensor.KubeConfig).CoreV1().ConfigMaps("kube-system").Delete(context.Background(), "test-configmap", metav1.DeleteOptions{})
-	}()
-
-	go sensor.Start(rules_basic)
-	waitStartSensor(t, sensor, rules_basic, 10)
-	sensor.ReloadRules(rules_reload)
-	waitStartSensor(t, sensor, rules_reload, 10)
-	if len(sensor.ruleInformers) != 2 {
-		t.Error("Failed to reload sensor")
-	}
-	if len(sensor.ruleInformers["test-rule-1"].rule.EventTypes) != 1 {
-		t.Error("New rules are not correctly loaded")
-	}
-	if sensor.ruleInformers["test-rule-2"].rule.Resource != rules_reload["test-rule-2"].Resource {
-		t.Error("New rules not correctly loaded")
-	}
-	configmap := &v1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-configmap",
-			Namespace: "kube-system",
-		},
-	}
-	test_configmap, err := kubernetes.NewForConfigOrDie(sensor.KubeConfig).CoreV1().ConfigMaps("kube-system").Create(context.Background(), configmap, metav1.CreateOptions{})
-	if err != nil {
-		t.Errorf("Failed to create configmap: %v", err)
-		return
-	}
-	switch checkIfObjectExistsInQueue(30, sensor, test_configmap, rules.ADDED) {
-	case errNotFound:
-		t.Error("Configmap not found in queue")
-	case errTimeout:
-		t.Error("Timeout waiting for configmap to be added to queue")
 	}
 }
 
@@ -319,8 +401,7 @@ func TestSensorIsWorkingWithCRDs(t *testing.T) {
 	}()
 
 	if _, err := clientapiextv1.NewForConfigOrDie(sensor.KubeConfig).CustomResourceDefinitions().Create(context.Background(), &crd, metav1.CreateOptions{}); err != nil {
-		t.Errorf("Failed to create CRD: %v", err)
-		return
+		t.Fatalf("Failed to create CRD: %v", err)
 	}
 
 	time.Sleep(3 * time.Second)
@@ -349,22 +430,18 @@ func TestSensorIsWorkingWithCRDs(t *testing.T) {
 	res := client.Resource(crdGVR).Namespace("default")
 	crdInst, err := res.Create(context.Background(), &crdObj, metav1.CreateOptions{})
 	if err != nil {
-		t.Errorf("Failed to create CRD instance: %v", err)
-		return
+		t.Fatalf("Failed to create CRD instance: %v", err)
 	}
 	switch checkIfObjectExistsInQueue(30, sensor, crdInst, rules.ADDED) {
 	case errNotFound:
-		t.Error("CRD instance for ADD event not found in queue")
-		return
+		t.Fatal("CRD instance for ADD event not found in queue")
 	case errTimeout:
-		t.Error("Timeout waiting for CRD instance ADD event to be added to queue")
-		return
+		t.Fatal("Timeout waiting for CRD instance ADD event to be added to queue")
 	}
 	crdInst.Object["spec"] = "test-spec-modified"
 	updatedCrdInst, err := res.Update(context.Background(), crdInst, metav1.UpdateOptions{})
 	if err != nil {
-		t.Errorf("Failed to update CRD instance: %v", err)
-		return
+		t.Fatalf("Failed to update CRD instance: %v", err)
 	}
 	switch checkIfObjectExistsInQueue(30, sensor, updatedCrdInst, rules.MODIFIED) {
 	case errNotFound:
@@ -391,8 +468,7 @@ func TestSensorWorkingWithClusterBoundResources(t *testing.T) {
 
 	nsObj, err := kubernetes.NewForConfigOrDie(sensor.KubeConfig).CoreV1().Namespaces().Create(context.Background(), ns, metav1.CreateOptions{})
 	if err != nil {
-		t.Errorf("Failed to create namespace: %v", err)
-		return
+		t.Fatalf("Failed to create namespace: %v", err)
 	}
 	switch checkIfObjectExistsInQueue(30, sensor, nsObj, rules.ADDED) {
 	case errNotFound:
@@ -419,22 +495,19 @@ func TestOnlyConfiguredEventListenerIsAdded(t *testing.T) {
 
 	nsObj, err := kubernetes.NewForConfigOrDie(sensor.KubeConfig).CoreV1().Namespaces().Create(context.Background(), ns, metav1.CreateOptions{})
 	if err != nil {
-		t.Errorf("Failed to create namespace: %v", err)
-		return
+		t.Fatalf("Failed to create namespace: %v", err)
 	}
 
 	switch checkIfObjectExistsInQueue(10, sensor, nsObj, rules.ADDED) {
 	case nil:
-		t.Errorf("Namespace %s ADDED event should not be added to queue", ns.Name)
-		return
+		t.Fatalf("Namespace %s ADDED event should not be added to queue", ns.Name)
 	}
 	ns.ObjectMeta.Labels = map[string]string{
 		"test-label": "test-value",
 	}
 	nsObj, err = kubernetes.NewForConfigOrDie(sensor.KubeConfig).CoreV1().Namespaces().Update(context.Background(), ns, metav1.UpdateOptions{})
 	if err != nil {
-		t.Errorf("Failed to update namespace: %v", err)
-		return
+		t.Fatalf("Failed to update namespace: %v", err)
 	}
 	switch checkIfObjectExistsInQueue(30, sensor, nsObj, rules.MODIFIED) {
 	case errNotFound:
@@ -460,16 +533,14 @@ func TestEnqueueOnlyOnSpecificK8sObjSubsetUpdate(t *testing.T) {
 	}()
 	_, err := kubernetes.NewForConfigOrDie(sensor.KubeConfig).CoreV1().Namespaces().Create(context.Background(), ns, metav1.CreateOptions{})
 	if err != nil {
-		t.Errorf("Failed to create namespace: %v", err)
-		return
+		t.Fatalf("Failed to create namespace: %v", err)
 	}
 	ns.ObjectMeta.Labels = map[string]string{
 		"test-label": "test-value",
 	}
 	nsObj, err := kubernetes.NewForConfigOrDie(sensor.KubeConfig).CoreV1().Namespaces().Update(context.Background(), ns, metav1.UpdateOptions{})
 	if err != nil {
-		t.Errorf("Failed to update namespace: %v", err)
-		return
+		t.Fatalf("Failed to update namespace: %v", err)
 	}
 	switch checkIfObjectExistsInQueue(10, sensor, nsObj, rules.MODIFIED) {
 	case nil:
@@ -510,8 +581,7 @@ func TestEnqueueOnlyOnSpecificK8sObjSubsetUpdate(t *testing.T) {
 
 	_, err = kubernetes.NewForConfigOrDie(sensor.KubeConfig).AppsV1().Deployments(ns.Name).Create(context.Background(), deployment, metav1.CreateOptions{})
 	if err != nil {
-		t.Errorf("Failed to create deployment: %v", err)
-		return
+		t.Fatalf("Failed to create deployment: %v", err)
 	}
 
 	defer func() {
@@ -520,14 +590,13 @@ func TestEnqueueOnlyOnSpecificK8sObjSubsetUpdate(t *testing.T) {
 
 	switch checkIfObjectExistsInQueue(5, sensor, deployment, rules.ADDED) {
 	case nil:
-		t.Errorf("Deployment %s ADDED event should not be added to queue", deployment.Name)
+		t.Fatalf("Deployment %s ADDED event should not be added to queue", deployment.Name)
 	}
 
 	deployment.Spec.Template.Spec.Containers[0].Name = "test-container-2-1"
 	deploymentObj, err := kubernetes.NewForConfigOrDie(sensor.KubeConfig).AppsV1().Deployments(ns.Name).Update(context.Background(), deployment, metav1.UpdateOptions{})
 	if err != nil {
-		t.Errorf("Failed to update deployment: %v", err)
-		return
+		t.Fatalf("Failed to update deployment: %v", err)
 	}
 	switch checkIfObjectExistsInQueue(5, sensor, deploymentObj, rules.MODIFIED) {
 	case errNotFound, errTimeout:

@@ -180,10 +180,11 @@ func (s *Sensor) ReloadRules(sensorRules map[rules.RuleID]*rules.Rule) {
 			s.ruleInformers[newRuleId] = ruleInf
 			ruleInf.startInformer()
 		} else {
-			if &newRule != &oldRuleInformer.rule {
+			if !reflect.DeepEqual(oldRuleInformer.rule, newRule) {
 				close(oldRuleInformer.stopChan)
 				ruleInf := s.registerInformerForRule(newRule)
 				s.ruleInformers[newRuleId] = ruleInf
+				ruleInf.startInformer()
 			}
 		}
 	}
@@ -219,7 +220,7 @@ func (s *Sensor) registerInformerForRule(rule *rules.Rule) *ruleInformer {
 		rule:              rule,
 		informer:          dynamicInformer,
 		stopChan:          ruleStopChan,
-		informerStartTime: time.Now(),
+		informerStartTime: time.Now().Local(),
 	}
 
 	dynamicInformer.Informer().AddEventHandler(cache.FilteringResourceEventHandler{
