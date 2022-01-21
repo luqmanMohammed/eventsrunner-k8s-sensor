@@ -27,8 +27,11 @@ type Event struct {
 	Objects   []*unstructured.Unstructured
 }
 
-// registeredRule is a struct wrapper arround rules.Rule.
-// It holds required rule management objects.
+// ruleInformer holds information related to a rule in runtime
+// along with the informer that is responsible to listen to the
+// events for a specific rule.
+// closing the stopChan channel will stop the informer and the
+// informer will stop listening to the events for the said rule.
 type ruleInformer struct {
 	rule              *rules.Rule
 	informerStartTime time.Time
@@ -79,10 +82,12 @@ func New(sensorOpts *SensorOpts) *Sensor {
 	}
 }
 
-// addFuncWrapper wraps inject the rules into the add resource event handler
+// addFuncWrapper injects the rules into the add resource event handler
 // function without affecting its signature.
 // Makes event handler addition dynamic based on the rules by returning nil if
 // ADDED event type is not configured for a specific rule.
+// If the objects where created before the start of the rule, the event wont be
+// processed.
 func (s *Sensor) addFuncWrapper(ruleInf *ruleInformer) func(obj interface{}) {
 	for _, t_eventType := range ruleInf.rule.EventTypes {
 		if t_eventType == rules.ADDED {
@@ -103,10 +108,12 @@ func (s *Sensor) addFuncWrapper(ruleInf *ruleInformer) func(obj interface{}) {
 	return nil
 }
 
-// updateFuncWrapper wraps inject the rules into the update resource event handler
+// updateFuncWrapper injects the rules into the update resource event handler
 // function without affecting its signature.
 // Makes event handler addition dynamic based on the rules by returning nil if
 // MODIFIED event type is not configured for a specific rule.
+// If the resource version of both new and old objects are same, the event
+// wont be processed.
 // Old object is stored as primary at index 0 and new object as secoundry at index 1.
 func (s *Sensor) updateFuncWrapper(ruleInf *ruleInformer) func(obj interface{}, newObj interface{}) {
 	for _, t_eventType := range ruleInf.rule.EventTypes {
@@ -146,7 +153,7 @@ func (s *Sensor) updateFuncWrapper(ruleInf *ruleInformer) func(obj interface{}, 
 	return nil
 }
 
-// deleteFuncWrapper wraps inject the rules into the delete resource event handler
+// deleteFuncWrapper injects the rules into the delete resource event handler
 // function without affecting its signature.
 // Makes event handler addition dynamic based on the rules by returning nil if
 // DELETED event type is not configured for a specific rule.
@@ -167,9 +174,10 @@ func (s *Sensor) deleteFuncWrapper(ruleInf *ruleInformer) func(obj interface{}) 
 }
 
 // ReloadRules will reload affected sensor rules without requiring a restart.
-// Thread safe.
-// Preps new rules, closes all informers for the existing rules and starts new
-// informers for the new rules.
+// Thread safe by using mutex.
+// Calculates which of the rules are affected, and reloads them.
+// Added new rules which are not present in the old rules will be added.
+// Rules which are not present in the new rules will be removed.
 // ReloadRules assumes all rules are valid and are unique.
 func (s *Sensor) ReloadRules(sensorRules map[rules.RuleID]*rules.Rule) {
 	s.lock.Lock()
@@ -196,8 +204,10 @@ func (s *Sensor) ReloadRules(sensorRules map[rules.RuleID]*rules.Rule) {
 	}
 }
 
+// registerInformerForRule creates a new informer for the provide rule.
+// Informers filters will be configured according to the rule.
+// TODO: Give more meaningful labelSelector.
 func (s *Sensor) registerInformerForRule(rule *rules.Rule) *ruleInformer {
-
 	dynamicInformer := dynamicinformer.NewFilteredDynamicInformer(
 		s.dynamicClientSet,
 		rule.GroupVersionResource,
@@ -245,7 +255,7 @@ func (s *Sensor) registerInformerForRule(rule *rules.Rule) *ruleInformer {
 	return ruleInformer
 }
 
-// Start starts the sensor. It will start all informers and register event handlers
+// Start starts the sensor. It will start all informers which will register event handlers
 // and filters based on the rules.
 // Start wont validate rules for unniqness.
 // Start is a blocking call.
