@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/luqmanMohammed/eventsrunner-k8s-sensor/common"
 	"github.com/luqmanMohammed/eventsrunner-k8s-sensor/sensor/rules"
+	"github.com/luqmanMohammed/eventsrunner-k8s-sensor/utils"
 
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
@@ -18,7 +18,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/rest"
 )
 
 var (
@@ -188,16 +187,8 @@ func waitStartSensor(t *testing.T, sensor *Sensor, ruleSet map[rules.RuleID]*rul
 	}
 }
 
-func setupKubconfig() *rest.Config {
-	if config, err := common.GetKubeAPIConfig(true, ""); err != nil {
-		panic(err)
-	} else {
-		return config
-	}
-}
-
 func setupSensor() *Sensor {
-	config := setupKubconfig()
+	config := utils.GetKubeAPIConfigOrDie("")
 	sensor := New(&SensorOpts{
 		KubeConfig:                     config,
 		SensorLabel:                    "k8s",
@@ -240,11 +231,7 @@ func checkIfObjectExistsInQueue(retry int, sensor *Sensor, searchObject metav1.O
 }
 
 func TestSensorStart(t *testing.T) {
-	config := setupKubconfig()
-	sensor := New(&SensorOpts{
-		KubeConfig:  config,
-		SensorLabel: "k8s",
-	})
+	sensor := setupSensor()
 	go sensor.Start(rules_basic)
 	defer sensor.Stop()
 	time.Sleep(3 * time.Second)
@@ -340,11 +327,7 @@ func TestSensorReload(t *testing.T) {
 }
 
 func TestObjectsCreatedBeforeSensorStartAreNotAdded(t *testing.T) {
-	config := setupKubconfig()
-	sensor := New(&SensorOpts{
-		KubeConfig:  config,
-		SensorLabel: "k8s",
-	})
+	sensor := setupSensor()
 	go sensor.Start(rules_cache)
 	defer sensor.Stop()
 	waitStartSensor(t, sensor, rules_cache, 10)
