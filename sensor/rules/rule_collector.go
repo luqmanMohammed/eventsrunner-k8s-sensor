@@ -3,14 +3,33 @@ package rules
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 
+	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/tools/cache"
+	"k8s.io/klog/v2"
 )
+
+// SensorReloadInterface should be implmented by sensors which should
+// support sensor reload based on rule change.
+type SensorReloadInterface interface {
+	ReloadRules(sensorRules map[RuleID]*Rule)
+}
+
+// RuleCollector absracts all types of rule collectors.
+type RuleCollector interface {
+	Collect(ctx context.Context) (map[RuleID]*Rule, error)
+	StartRuleCollector(ctx context.Context, sensorRI SensorReloadInterface)
+}
 
 // ConfigMapRuleCollector is used to collect rules from a kubernetes configmap
 // Rules will be collect from the configmaps with the label er-sensor-rules in
 // the sensor namespace.
+// Implements RuleCollector Interface
 type ConfigMapRuleCollector struct {
 	clientSet                *kubernetes.Clientset
 	sensorNamespace          string
@@ -24,34 +43,98 @@ type ConfigMapRuleCollector struct {
 // be returned.
 // If unable to list all configmaps in the sensor namespace, an error will be
 // returned.
-// TODO: Add rule validation
 func (cmrc ConfigMapRuleCollector) Collect(ctx context.Context) (map[RuleID]*Rule, error) {
-	rules := make(map[RuleID]*Rule)
+	klog.V(1).Infof("Collecting rules from %v namespace with label %v", cmrc.sensorNamespace, cmrc.sensorRuleConfigMapLabel)
 	cmList, err := cmrc.clientSet.CoreV1().ConfigMaps(cmrc.sensorNamespace).List(ctx, metav1.ListOptions{
 		LabelSelector: cmrc.sensorRuleConfigMapLabel,
 	})
-
 	if err != nil {
+		klog.V(1).ErrorS(err, "Error trying to list configmaps")
 		return nil, err
 	}
+	klog.V(1).Infof("Number of configmaps to process: %d", len(cmList.Items))
+	rules := cmrc.parseCollectedConfigMapsIntoRules(cmList.Items)
+	return rules, nil
+}
 
-	for _, cm := range cmList.Items {
+// parseCollectedConfigMapsIntoRules parses provided list of configmaps into
+// a map of rules.
+// Data feild of configmap should contain key rules, which should contain a json
+// list of valid rules (Refer Rule struct doc for further information).
+// Each rule should contain a valid rule ID, else rule wont be processed.
+// If any errors are found during json decoding, error will be logged and the
+// function will continue executing.
+// TODO: Add proper rule validation
+func (cmrc ConfigMapRuleCollector) parseCollectedConfigMapsIntoRules(cmList []v1.ConfigMap) map[RuleID]*Rule {
+	rules := make(map[RuleID]*Rule)
+	for _, cm := range cmList {
 		tmpRules := []*Rule{}
 		rulesStr, ok := cm.Data["rules"]
 		if !ok {
+			klog.V(2).Infof("Collected configmap %v, doesn't contain 'rules' key. Skipping", cm.Name)
 			continue
 		}
 		if errJsonUnMarshal := json.Unmarshal([]byte(rulesStr), &tmpRules); errJsonUnMarshal != nil {
+			klog.V(2).ErrorS(errJsonUnMarshal, fmt.Sprintf("JSON error when decoding content of configmap %v. Skipping", cm.Name))
 			continue
 		}
 		for _, rule := range tmpRules {
 			if rule.ID == "" {
+				klog.V(3).Infof("One of the rules in configmap %v. Doesn't contain required attribute ID", cm.Name)
 				continue
 			}
 			if _, ok := rules[rule.ID]; !ok {
 				rules[rule.ID] = rule
+				klog.V(3).Infof("Rule %v successfully loaded from configmap %v", rule.ID, cm.Name)
 			}
 		}
 	}
-	return rules, nil
+	return rules
+}
+
+// StartRuleCollector will continously listen for rule configmap changes and
+// will reload the rules of the provided sensor.
+// Cancelling the provided context will stop the collector.
+func (cmrc ConfigMapRuleCollector) StartRuleCollector(ctx context.Context, sensorRI SensorReloadInterface) {
+	parseStoreIntoConfigMaps := func(store cache.Store) []v1.ConfigMap {
+		cmList := make([]v1.ConfigMap, len(store.ListKeys()))
+		for i, cm := range store.List() {
+			cmList[i] = *cm.(*v1.ConfigMap)
+		}
+		return cmList
+	}
+	klog.V(1).Info("Configuring continous rule collector")
+	changeQueue := make(chan struct{}, 10)
+	informerFactory := informers.NewSharedInformerFactoryWithOptions(cmrc.clientSet, 0, informers.WithNamespace(cmrc.sensorNamespace), informers.WithTweakListOptions(func(lo *metav1.ListOptions) {
+		lo.LabelSelector = cmrc.sensorRuleConfigMapLabel
+	}))
+	informerFactory.Core().V1().ConfigMaps().Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+		AddFunc: func(obj interface{}) {
+			changeQueue <- struct{}{}
+		},
+		UpdateFunc: func(oldObj, newObj interface{}) {
+			changeQueue <- struct{}{}
+		},
+		DeleteFunc: func(obj interface{}) {
+			changeQueue <- struct{}{}
+		},
+	})
+	klog.V(1).Info("Starting continous rule collector")
+	go informerFactory.Start(ctx.Done())
+	if !cache.WaitForCacheSync(ctx.Done(), informerFactory.Core().V1().ConfigMaps().Informer().HasSynced) {
+		klog.V(2).ErrorS(errors.New("ConfigMap Cache Wait Failed"), "")
+	}
+	for {
+		select {
+		case <-ctx.Done():
+			klog.V(1).Info("Stopping rule collector")
+			close(changeQueue)
+			return
+		case <-changeQueue:
+			klog.V(5).Info("Rule change detected. Parsing and reloading rules")
+			configMapList := parseStoreIntoConfigMaps(informerFactory.Core().V1().ConfigMaps().Informer().GetStore())
+			ruleMap := cmrc.parseCollectedConfigMapsIntoRules(configMapList)
+			sensorRI.ReloadRules(ruleMap)
+		}
+	}
 }
