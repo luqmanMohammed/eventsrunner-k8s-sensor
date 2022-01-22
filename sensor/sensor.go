@@ -6,8 +6,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/luqmanMohammed/eventsrunner-k8s-sensor/common"
 	"github.com/luqmanMohammed/eventsrunner-k8s-sensor/sensor/rules"
+	"github.com/luqmanMohammed/eventsrunner-k8s-sensor/utils"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/client-go/dynamic"
@@ -240,7 +240,7 @@ func (s *Sensor) registerInformerForRule(rule *rules.Rule) *ruleInformer {
 			if !ok {
 				return false
 			}
-			if len(rule.Namespaces) != 0 && !common.StringInSlice(meta.GetNamespace(), rule.Namespaces) {
+			if len(rule.Namespaces) != 0 && !utils.StringInSlice(meta.GetNamespace(), rule.Namespaces) {
 				return false
 			}
 			return true

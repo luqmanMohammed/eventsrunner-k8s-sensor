@@ -4,11 +4,10 @@ import (
 	"context"
 	"testing"
 
-	"github.com/luqmanMohammed/eventsrunner-k8s-sensor/common"
+	"github.com/luqmanMohammed/eventsrunner-k8s-sensor/utils"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/rest"
 )
 
 var (
@@ -38,13 +37,14 @@ var (
 		"group": "",
 		"version": "v1",
 		"resource": "pods",
-		"namespaces": ["default"]
+		"namespaces": ["default"],
+		"eventTypes": ["ADDED", "MODIFIED"]
 	}]
 	`
 )
 
 func setupRuleCollector() *ConfigMapRuleCollector {
-	config := setupKubconfig()
+	config := utils.GetKubeAPIConfigOrDie("")
 	return &ConfigMapRuleCollector{
 		clientSet:                kubernetes.NewForConfigOrDie(config),
 		sensorNamespace:          "default",
@@ -52,16 +52,8 @@ func setupRuleCollector() *ConfigMapRuleCollector {
 	}
 }
 
-func setupKubconfig() *rest.Config {
-	if config, err := common.GetKubeAPIConfig(true, ""); err != nil {
-		panic(err)
-	} else {
-		return config
-	}
-}
-
 func addRuleConfigMap(configMapName string, strRule string) error {
-	config := setupKubconfig()
+	config := utils.GetKubeAPIConfigOrDie("")
 	if _, err := kubernetes.NewForConfigOrDie(config).CoreV1().ConfigMaps("default").Create(context.Background(), &v1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: configMapName,
@@ -79,7 +71,7 @@ func addRuleConfigMap(configMapName string, strRule string) error {
 }
 
 func deleteRuleConfigMap(configMapName string) error {
-	config := setupKubconfig()
+	config := utils.GetKubeAPIConfigOrDie("")
 	if err := kubernetes.NewForConfigOrDie(config).CoreV1().ConfigMaps("default").Delete(context.Background(), configMapName, metav1.DeleteOptions{}); err != nil {
 		return err
 	}
@@ -92,11 +84,14 @@ func TestStarterRuleCollectionFromMultipleConfigMaps(t *testing.T) {
 	addRuleConfigMap("basic-rules2", exampleBasicRule2Str)
 	defer deleteRuleConfigMap("basic-rules2")
 	ruleCollector := setupRuleCollector()
-	if rules, err := ruleCollector.Collect(context.Background()); err != nil {
+	if collectedRules, err := ruleCollector.Collect(context.Background()); err != nil {
 		t.Errorf("Error while collecting rules: %v", err)
 	} else {
-		if len(rules) != 3 {
-			t.Errorf("Expected 3 rules, got %d", len(rules))
+		if len(collectedRules) != 3 {
+			t.Errorf("Expected 3 rules, got %d", len(collectedRules))
+		}
+		if collectedRules["basic-pod-rule"].EventTypes[0] != ADDED {
+			t.Errorf("Expected event type %s, got %s", ADDED, collectedRules["basic-pod-rule"].EventTypes[0])
 		}
 	}
 }
