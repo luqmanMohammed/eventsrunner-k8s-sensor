@@ -3,6 +3,7 @@ package rules
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/luqmanMohammed/eventsrunner-k8s-sensor/utils"
 	v1 "k8s.io/api/core/v1"
@@ -13,7 +14,7 @@ import (
 var (
 	exampleBasicRuleStr = `
 	[{
-		id": "basic-pod-rule",
+		"id": "basic-pod-rule",
 		"group": "",
 		"version": "v1",
 		"resource": "pods",
@@ -31,14 +32,14 @@ var (
 		"id": "basic-namespace-rule",
 		"group": "",
 		"version": "v1",
-		"resource": "namespaces"
+		"resource": "namespaces",
+		"eventTypes": ["ADDED", "MODIFIED"]
 	},{
 		"id": "basic-pod-rule",
 		"group": "",
 		"version": "v1",
 		"resource": "pods",
-		"namespaces": ["default"],
-		"eventTypes": ["ADDED", "MODIFIED"]
+		"namespaces": ["default"]
 	}]
 	`
 )
@@ -48,7 +49,7 @@ func setupRuleCollector() *ConfigMapRuleCollector {
 	return &ConfigMapRuleCollector{
 		clientSet:                kubernetes.NewForConfigOrDie(config),
 		sensorNamespace:          "default",
-		sensorRuleConfigMapLabel: "er-sensor-rules",
+		sensorRuleConfigMapLabel: "er-sensor-rules=true",
 	}
 }
 
@@ -90,8 +91,50 @@ func TestStarterRuleCollectionFromMultipleConfigMaps(t *testing.T) {
 		if len(collectedRules) != 3 {
 			t.Errorf("Expected 3 rules, got %d", len(collectedRules))
 		}
-		if collectedRules["basic-pod-rule"].EventTypes[0] != ADDED {
+		if collectedRules["basic-namespace-rule"].EventTypes[0] != ADDED {
 			t.Errorf("Expected event type %s, got %s", ADDED, collectedRules["basic-pod-rule"].EventTypes[0])
 		}
+	}
+}
+
+type mockServer struct {
+	Rules map[RuleID]*Rule
+}
+
+func (ms *mockServer) ReloadRules(sensorRules map[RuleID]*Rule) {
+	ms.Rules = sensorRules
+}
+
+func TestContinousRuleCollection(t *testing.T) {
+	ms := &mockServer{}
+	checkRules := func(ruleID RuleID, retry int) bool {
+		retryCount := 0
+		for {
+			if len(ms.Rules) > 0 {
+				if _, ok := ms.Rules[ruleID]; ok {
+					return true
+				}
+			}
+			if retryCount >= retry {
+				return false
+			} else {
+				retryCount++
+				time.Sleep(1 * time.Second)
+			}
+		}
+	}
+	addRuleConfigMap("basic-rules", exampleBasicRuleStr)
+	defer deleteRuleConfigMap("basic-rules")
+	ruleCollector := setupRuleCollector()
+	ctx, cancelFunc := context.WithCancel(context.Background())
+	defer cancelFunc()
+	go ruleCollector.StartRuleCollector(ctx, ms)
+	if !checkRules("basic-pod-rule", 10) {
+		t.Error("Timeout trying to find basic-pod-rule")
+	}
+	addRuleConfigMap("basic-rules-2", exampleBasicRule2Str)
+	defer deleteRuleConfigMap("basic-rules-2")
+	if !checkRules("basic-namespace-rule", 10) {
+		t.Error("Timeout trying to find basic-namespace-rule")
 	}
 }
