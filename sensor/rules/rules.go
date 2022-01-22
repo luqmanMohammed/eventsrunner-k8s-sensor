@@ -3,10 +3,10 @@ package rules
 import "k8s.io/apimachinery/pkg/runtime/schema"
 
 const (
-	ADDED    EventType = "ADDED"
-	MODIFIED EventType = "MODIFIED"
-	DELETED  EventType = "DELETED"
-	NONE     EventType = "NONE"
+	ADDED    EventType = "added"
+	MODIFIED EventType = "modified"
+	DELETED  EventType = "deleted"
+	NONE     EventType = "none"
 )
 
 // EventType is used to reperesent the type of event produced by the kubernetes api server
