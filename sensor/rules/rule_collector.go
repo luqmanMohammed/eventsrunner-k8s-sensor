@@ -79,8 +79,17 @@ func (cmrc ConfigMapRuleCollector) parseCollectedConfigMapsIntoRules(cmList []v1
 			continue
 		}
 		for _, rule := range tmpRules {
-			if rule.ID == "" {
-				klog.V(3).Infof("One of the rules in configmap %v. Doesn't contain required attribute ID", cm.Name)
+			switch NormalizeAndValidateRule(rule) {
+			case nil:
+				klog.V(3).Infof("Rule %v is valid", rule.ID)
+			case ErrRuleIDNotFound:
+				klog.V(3).ErrorS(ErrRuleIDNotFound, fmt.Sprintf("Rule %v doesn't have an ID. Skipping", rule.ID))
+				continue
+			case ErrRuleEventTypesNotFound:
+				klog.V(3).ErrorS(ErrRuleEventTypesNotFound, fmt.Sprintf("Rule %v doesn't have an event types list. Skipping", rule.ID))
+				continue
+			case ErrRuleEventTypesNotValid:
+				klog.V(3).ErrorS(ErrRuleEventTypesNotValid, fmt.Sprintf("Rule %v has an invalid event types list. Should be one of added, modified or deleted. Skipping", rule.ID))
 				continue
 			}
 			if _, ok := rules[rule.ID]; !ok {

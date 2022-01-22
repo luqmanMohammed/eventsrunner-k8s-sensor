@@ -18,7 +18,8 @@ var (
 		"group": "",
 		"version": "v1",
 		"resource": "pods",
-		"namespaces": ["default"]
+		"namespaces": ["default"],
+		"eventTypes": ["ADDED", "MODIFIED"]
 	}]
 	`
 	exampleBasicRule2Str = `
@@ -27,7 +28,8 @@ var (
 		"group": "",
 		"version": "v1",
 		"resource": "configmaps",
-		"namespaces": ["default"]
+		"namespaces": ["default"],
+		"eventTypes": ["ADDED", "MODIFIED"]
 	},{
 		"id": "basic-namespace-rule",
 		"group": "",
@@ -39,7 +41,8 @@ var (
 		"group": "",
 		"version": "v1",
 		"resource": "pods",
-		"namespaces": ["default"]
+		"namespaces": ["default"],
+		"eventTypes": ["ADDED", "MODIFIED"]
 	}]
 	`
 )
@@ -89,10 +92,10 @@ func TestStarterRuleCollectionFromMultipleConfigMaps(t *testing.T) {
 		t.Errorf("Error while collecting rules: %v", err)
 	} else {
 		if len(collectedRules) != 3 {
-			t.Errorf("Expected 3 rules, got %d", len(collectedRules))
+			t.Fatalf("Expected 3 rules, got %d", len(collectedRules))
 		}
 		if collectedRules["basic-namespace-rule"].EventTypes[0] != ADDED {
-			t.Errorf("Expected event type %s, got %s", ADDED, collectedRules["basic-pod-rule"].EventTypes[0])
+			t.Fatalf("Expected event type %s, got %s", ADDED, collectedRules["basic-namespace-rule"].EventTypes[0])
 		}
 	}
 }
@@ -130,11 +133,11 @@ func TestContinousRuleCollection(t *testing.T) {
 	defer cancelFunc()
 	go ruleCollector.StartRuleCollector(ctx, ms)
 	if !checkRules("basic-pod-rule", 10) {
-		t.Error("Timeout trying to find basic-pod-rule")
+		t.Fatal("Timeout trying to find basic-pod-rule")
 	}
 	addRuleConfigMap("basic-rules-2", exampleBasicRule2Str)
 	defer deleteRuleConfigMap("basic-rules-2")
 	if !checkRules("basic-namespace-rule", 10) {
-		t.Error("Timeout trying to find basic-namespace-rule")
+		t.Fatal("Timeout trying to find basic-namespace-rule")
 	}
 }
