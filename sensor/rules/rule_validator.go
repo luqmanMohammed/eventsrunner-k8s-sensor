@@ -25,15 +25,14 @@ func NormalizeAndValidateRule(rule *Rule) error {
 	if len(rule.EventTypes) == 0 {
 		return ErrRuleEventTypesNotFound
 	}
-
 	uniqueEventTypesSet := map[EventType]struct{}{}
-	normalizedEventTypes := make([]EventType, len(rule.EventTypes))
-	for i, eventType := range rule.EventTypes {
-		if _, ok := uniqueEventTypesSet[eventType]; ok {
+	normalizedEventTypes := make([]EventType, 0, len(rule.EventTypes))
+	for _, eventType := range rule.EventTypes {
+		lowerEventType := EventType(strings.ToLower(string(eventType)))
+		if _, ok := uniqueEventTypesSet[lowerEventType]; ok {
 			continue
 		}
-		lowerEventType := EventType(strings.ToLower(string(eventType)))
-		normalizedEventTypes[i] = lowerEventType
+		normalizedEventTypes = append(normalizedEventTypes, lowerEventType)
 		uniqueEventTypesSet[lowerEventType] = struct{}{}
 	}
 	rule.EventTypes = normalizedEventTypes
