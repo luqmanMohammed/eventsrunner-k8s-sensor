@@ -7,6 +7,9 @@ import (
 	"k8s.io/klog/v2"
 )
 
+// GetKubeAPIConfig returns a Kubernetes API config.
+// Common abstraction to get config in both incluster and out cluster
+// scenarios.
 func GetKubeAPIConfig(kubeConfigPath string) (*rest.Config, error) {
 	if kubeConfigPath == "" {
 		klog.V(3).Info("Provided KubeConfig path is empty. Getting config from home")
@@ -17,6 +20,8 @@ func GetKubeAPIConfig(kubeConfigPath string) (*rest.Config, error) {
 	return clientcmd.BuildConfigFromFlags("", kubeConfigPath)
 }
 
+// GetKubeAPIConfigOrDie wrapper around GetKubeAPIConfig.
+// Panics if unable to load config.
 func GetKubeAPIConfigOrDie(kubeConfigPath string) *rest.Config {
 	config, err := GetKubeAPIConfig(kubeConfigPath)
 	if err != nil {
@@ -25,6 +30,7 @@ func GetKubeAPIConfigOrDie(kubeConfigPath string) *rest.Config {
 	return config
 }
 
+// StringInSlice returns true if the string is in the slice.
 func StringInSlice(a string, list []string) bool {
 	for _, b := range list {
 		if b == a {
