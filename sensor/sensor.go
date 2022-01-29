@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/luqmanMohammed/eventsrunner-k8s-sensor/sensor/eventqueue"
 	"github.com/luqmanMohammed/eventsrunner-k8s-sensor/sensor/rules"
 	"github.com/luqmanMohammed/eventsrunner-k8s-sensor/utils"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -18,14 +19,6 @@ import (
 	"k8s.io/client-go/util/workqueue"
 	"k8s.io/klog/v2"
 )
-
-// Event struct holds all information related to an event.
-// TODO: Move to another package
-type Event struct {
-	EventType rules.EventType
-	RuleID    rules.RuleID
-	Objects   []*unstructured.Unstructured
-}
 
 // ruleInformer holds information related to a rule in runtime
 // along with the informer that is responsible to listen to the
@@ -61,7 +54,6 @@ type Sensor struct {
 	ruleInformers    map[rules.RuleID]*ruleInformer
 	stopChan         chan struct{}
 	lock             sync.Mutex
-	startTime        time.Time
 }
 
 // Creates a new default Sensor. Refer Sensor struct documentation for
@@ -78,7 +70,6 @@ func New(sensorOpts *SensorOpts) *Sensor {
 		ruleInformers:    make(map[rules.RuleID]*ruleInformer),
 		stopChan:         make(chan struct{}),
 		Queue:            workqueue.NewRateLimitingQueue(workqueue.DefaultControllerRateLimiter()),
-		startTime:        time.Now().Add(-sensorOpts.LoadObjectsDurationBeforeStart),
 	}
 }
 
@@ -96,7 +87,7 @@ func (s *Sensor) addFuncWrapper(ruleInf *ruleInformer) func(obj interface{}) {
 				if !unstructuredObj.GetCreationTimestamp().After(ruleInf.informerStartTime) {
 					return
 				}
-				s.Queue.Add(&Event{
+				s.Queue.AddRateLimited(&eventqueue.Event{
 					EventType: rules.ADDED,
 					RuleID:    ruleInf.rule.ID,
 					Objects:   []*unstructured.Unstructured{unstructuredObj},
@@ -141,7 +132,7 @@ func (s *Sensor) updateFuncWrapper(ruleInf *ruleInformer) func(obj interface{}, 
 					}
 				}
 
-				s.Queue.Add(&Event{
+				s.Queue.AddRateLimited(&eventqueue.Event{
 					EventType: rules.MODIFIED,
 					RuleID:    ruleInf.rule.ID,
 					Objects:   []*unstructured.Unstructured{unstructuredObj, unstructuredNewObj},
@@ -161,7 +152,7 @@ func (s *Sensor) deleteFuncWrapper(ruleInf *ruleInformer) func(obj interface{}) 
 	for _, t_eventType := range ruleInf.rule.EventTypes {
 		if t_eventType == rules.DELETED {
 			return func(obj interface{}) {
-				s.Queue.Add(&Event{
+				s.Queue.AddRateLimited(&eventqueue.Event{
 					EventType: rules.DELETED,
 					RuleID:    ruleInf.rule.ID,
 					Objects:   []*unstructured.Unstructured{obj.(*unstructured.Unstructured)},
@@ -257,7 +248,7 @@ func (s *Sensor) registerInformerForRule(rule *rules.Rule) *ruleInformer {
 
 // Start starts the sensor. It will start all informers which will register event handlers
 // and filters based on the rules.
-// Start wont validate rules for unniqness.
+// Start wont validate rules for uniques.
 // Start is a blocking call.
 func (s *Sensor) Start(sensorRules map[rules.RuleID]*rules.Rule) {
 	klog.V(1).Info("Starting sensor")
