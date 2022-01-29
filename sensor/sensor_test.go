@@ -3,6 +3,7 @@ package sensor
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -171,7 +172,7 @@ func retryFunc(retryFunc func() bool, count int) bool {
 	return false
 }
 
-func waitStartSensor(t *testing.T, sensor *Sensor, ruleSet map[rules.RuleID]*rules.Rule, waitSecounds int) {
+func waitStartSensor(t *testing.T, sensor *Sensor, ruleSet map[rules.RuleID]*rules.Rule, waitSeconds int) {
 	if !retryFunc(func() bool {
 		if len(sensor.ruleInformers) != len(ruleSet) {
 			return false
@@ -182,7 +183,7 @@ func waitStartSensor(t *testing.T, sensor *Sensor, ruleSet map[rules.RuleID]*rul
 			}
 		}
 		return false
-	}, waitSecounds) {
+	}, waitSeconds) {
 		t.Error("Failed to start sensor")
 		return
 	}
@@ -439,7 +440,7 @@ func TestSensorWorkingWithClusterBoundResources(t *testing.T) {
 	sensor := setupSensor()
 	go sensor.Start(rules_clusterbound)
 	waitStartSensor(t, sensor, rules_clusterbound, 10)
-
+	fmt.Println("came")
 	ns := &v1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "test-namespace",
@@ -585,5 +586,86 @@ func TestEnqueueOnlyOnSpecificK8sObjSubsetUpdate(t *testing.T) {
 	switch checkIfObjectExistsInQueue(5, sensor, deploymentObj, rules.MODIFIED) {
 	case errNotFound, errTimeout:
 		t.Errorf("Deployment %s MODIFIED event not found in queue", deployment.Name)
+	}
+}
+
+type mockQueueExecutor struct {
+	events []*eventqueue.Event
+}
+
+func (mqe *mockQueueExecutor) Execute(event *eventqueue.Event) error {
+	mqe.events = append(mqe.events, event)
+	return nil
+}
+
+func TestWorkerPoolIntegration(t *testing.T) {
+	config := utils.GetKubeAPIConfigOrDie("")
+	mockExec := &mockQueueExecutor{}
+	sensor := New(&SensorOpts{
+		KubeConfig:                     config,
+		SensorLabel:                    "k8s",
+		LoadObjectsDurationBeforeStart: time.Second * 0,
+		EventQueueOpts: eventqueue.EventQueueOpts{
+			WorkerCount:  1,
+			MaxTryCount:  5,
+			RequeueDelay: time.Second * 1,
+		},
+	}, mockExec)
+	go sensor.StartSensorAndWorkerPool(rules_basic)
+	waitStartSensor(t, sensor, rules_basic, 10)
+
+	// make sure the sensor dint process any old objects
+	for i := 0; i < 5; i++ {
+		time.Sleep(time.Second)
+		if len(mockExec.events) > 0 {
+			t.Fatalf("Sensor should not process old objects")
+		}
+	}
+
+	pod := &v1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "int-test-pod-1",
+			Namespace: "default",
+		},
+		Spec: v1.PodSpec{
+			Containers: []v1.Container{
+				{
+					Name:  "test-container-1",
+					Image: "nginx",
+				},
+			},
+		},
+	}
+
+	podObj, err := kubernetes.NewForConfigOrDie(config).CoreV1().Pods("default").Create(context.Background(), pod, metav1.CreateOptions{})
+	if err != nil {
+		t.Fatalf("Failed to create pod: %v", err)
+	}
+	defer func() {
+		kubernetes.NewForConfigOrDie(config).CoreV1().Pods("default").Delete(context.Background(), pod.Name, metav1.DeleteOptions{})
+	}()
+
+	tries := 0
+	breakFlag := false
+	for {
+		tries++
+		if tries == 5 {
+			t.Fatalf("Pod %s ADDED event not executed", pod.Name)
+		}
+		if len(mockExec.events) > 1 {
+			for _, event := range mockExec.events {
+				if event.Objects[0].GetUID() == podObj.GetUID() {
+					breakFlag = true
+					break
+				}
+			}
+		}
+		if breakFlag {
+			break
+		}
+		time.Sleep(time.Second)
+	}
+	for _, event := range mockExec.events {
+		t.Logf("Event description: %s %s", event.EventType, event.Objects[0].GetName())
 	}
 }
