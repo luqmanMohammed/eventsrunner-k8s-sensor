@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/luqmanMohammed/eventsrunner-k8s-sensor/sensor/eventqueue"
 	"github.com/luqmanMohammed/eventsrunner-k8s-sensor/sensor/rules"
 	"github.com/luqmanMohammed/eventsrunner-k8s-sensor/utils"
 
@@ -207,7 +208,7 @@ func checkIfObjectExistsInQueue(retry int, sensor *Sensor, searchObject metav1.O
 	for {
 		if sensor.Queue.Len() > 0 {
 			item, shutdown := sensor.Queue.Get()
-			event := item.(*Event)
+			event := item.(*eventqueue.Event)
 			if event.Objects[0].GetName() == searchObject.GetName() &&
 				event.Objects[0].GetNamespace() == searchObject.GetNamespace() {
 				if eventType == rules.NONE {
