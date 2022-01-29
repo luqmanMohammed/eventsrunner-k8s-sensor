@@ -260,6 +260,14 @@ func (s *Sensor) Start(sensorRules map[rules.RuleID]*rules.Rule) {
 	<-s.stopChan
 }
 
+// StartSensorAndWorkerPool will start the sensor and the worker pool.
+// Worker pool which is part of the eventqueue module will consume events from teh queue.
+func (s *Sensor) StartSensorAndWorkerPool(sensorRules map[rules.RuleID]*rules.Rule) {
+	go s.Start(sensorRules)
+	go s.Queue.StartQueueWorkerPool()
+	<-s.stopChan
+}
+
 // Stop stops the sensor. It will stop all informers and unregister event handlers.
 // Stop will block until all informers are stopped.
 // Stop will release Start call.
@@ -269,4 +277,5 @@ func (s *Sensor) Stop() {
 		close(ruleInf.stopChan)
 	}
 	close(s.stopChan)
+	s.Queue.ShutDownWithDrain()
 }

@@ -35,6 +35,17 @@ func NormalizeAndValidateRule(rule *Rule) error {
 		normalizedEventTypes = append(normalizedEventTypes, lowerEventType)
 		uniqueEventTypesSet[lowerEventType] = struct{}{}
 	}
+	normalizedUpdateOnSet := map[string]struct{}{}
+	normalizedUpdateOn := make([]string, 0, len(rule.UpdatesOn))
+	for _, updateOn := range rule.UpdatesOn {
+		lowerUpdateOn := strings.ToLower(string(updateOn))
+		if _, ok := normalizedUpdateOnSet[lowerUpdateOn]; ok {
+			continue
+		}
+		normalizedUpdateOn = append(normalizedUpdateOn, lowerUpdateOn)
+		normalizedUpdateOnSet[lowerUpdateOn] = struct{}{}
+	}
+	rule.UpdatesOn = normalizedUpdateOn
 	rule.EventTypes = normalizedEventTypes
 	for _, eventType := range rule.EventTypes {
 		if eventType != ADDED && eventType != MODIFIED && eventType != DELETED {
