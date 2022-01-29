@@ -16,7 +16,6 @@ import (
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/cache"
-	"k8s.io/client-go/util/workqueue"
 	"k8s.io/klog/v2"
 )
 
@@ -39,6 +38,7 @@ func (rr *ruleInformer) startInformer() {
 
 // SensorOpts holds options related to sensor configuration
 type SensorOpts struct {
+	eventqueue.EventQueueOpts
 	KubeConfig                     *rest.Config
 	SensorLabel                    string
 	LoadObjectsDurationBeforeStart time.Duration
@@ -50,7 +50,7 @@ type SensorOpts struct {
 type Sensor struct {
 	*SensorOpts
 	dynamicClientSet dynamic.Interface
-	Queue            workqueue.RateLimitingInterface
+	Queue            *eventqueue.EventQueue
 	ruleInformers    map[rules.RuleID]*ruleInformer
 	stopChan         chan struct{}
 	lock             sync.Mutex
@@ -59,7 +59,7 @@ type Sensor struct {
 // Creates a new default Sensor. Refer Sensor struct documentation for
 // more information.
 // SensorOpts is required.
-func New(sensorOpts *SensorOpts) *Sensor {
+func New(sensorOpts *SensorOpts, executor eventqueue.QueueExecutor) *Sensor {
 	if sensorOpts == nil {
 		panic("SensorOpts cannot be nil")
 	}
@@ -69,7 +69,7 @@ func New(sensorOpts *SensorOpts) *Sensor {
 		dynamicClientSet: dynamicClientSet,
 		ruleInformers:    make(map[rules.RuleID]*ruleInformer),
 		stopChan:         make(chan struct{}),
-		Queue:            workqueue.NewRateLimitingQueue(workqueue.DefaultControllerRateLimiter()),
+		Queue:            eventqueue.New(executor, sensorOpts.EventQueueOpts),
 	}
 }
 
@@ -87,7 +87,7 @@ func (s *Sensor) addFuncWrapper(ruleInf *ruleInformer) func(obj interface{}) {
 				if !unstructuredObj.GetCreationTimestamp().After(ruleInf.informerStartTime) {
 					return
 				}
-				s.Queue.AddRateLimited(&eventqueue.Event{
+				s.Queue.Add(&eventqueue.Event{
 					EventType: rules.ADDED,
 					RuleID:    ruleInf.rule.ID,
 					Objects:   []*unstructured.Unstructured{unstructuredObj},
@@ -132,7 +132,7 @@ func (s *Sensor) updateFuncWrapper(ruleInf *ruleInformer) func(obj interface{}, 
 					}
 				}
 
-				s.Queue.AddRateLimited(&eventqueue.Event{
+				s.Queue.Add(&eventqueue.Event{
 					EventType: rules.MODIFIED,
 					RuleID:    ruleInf.rule.ID,
 					Objects:   []*unstructured.Unstructured{unstructuredObj, unstructuredNewObj},
@@ -152,7 +152,7 @@ func (s *Sensor) deleteFuncWrapper(ruleInf *ruleInformer) func(obj interface{}) 
 	for _, t_eventType := range ruleInf.rule.EventTypes {
 		if t_eventType == rules.DELETED {
 			return func(obj interface{}) {
-				s.Queue.AddRateLimited(&eventqueue.Event{
+				s.Queue.Add(&eventqueue.Event{
 					EventType: rules.DELETED,
 					RuleID:    ruleInf.rule.ID,
 					Objects:   []*unstructured.Unstructured{obj.(*unstructured.Unstructured)},

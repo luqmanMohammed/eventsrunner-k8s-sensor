@@ -22,6 +22,14 @@ type QueueExecutor interface {
 	Execute(event *Event) error
 }
 
+// MockQueueExecutor is a mock implementation of QueueExecutor.
+// It is used for testing or as a placeholder.
+type MockQueueExecutor struct{}
+
+func (*MockQueueExecutor) Execute(event *Event) error {
+	return nil
+}
+
 // EventQueue wraps around the workqueue.DelayingInterface and provides
 // additional functionality.
 // Adds functionality to process and retry items if failed.
@@ -33,15 +41,22 @@ type EventQueue struct {
 	executor     QueueExecutor
 }
 
+type EventQueueOpts struct {
+	WorkerCount  int
+	MaxTryCount  int
+	RequeueDelay time.Duration
+}
+
 // Creates a New EventQueue and returns the pointer to it.
-func New(executor QueueExecutor, workerCount int, maxTryCount int, requeueDelay time.Duration) *EventQueue {
+func New(executor QueueExecutor, queueOpts EventQueueOpts) *EventQueue {
 	eq := &EventQueue{
 		DelayingInterface: workqueue.NewDelayingQueue(),
-		workerCount:       workerCount,
-		maxTryCount:       maxTryCount,
-		requeueDelay:      requeueDelay,
+		workerCount:       queueOpts.WorkerCount,
+		maxTryCount:       queueOpts.MaxTryCount,
+		requeueDelay:      queueOpts.RequeueDelay,
 		executor:          executor,
 	}
+
 	return eq
 }
 

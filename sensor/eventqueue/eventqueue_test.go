@@ -10,6 +10,11 @@ import (
 )
 
 var (
+	queueOpts = EventQueueOpts{
+		WorkerCount:  1,
+		MaxTryCount:  3,
+		RequeueDelay: 100 * time.Millisecond,
+	}
 	basicEvents = []*Event{
 		{
 			EventType: "added",
@@ -55,7 +60,7 @@ func TestQueueWorkerNormalBehavior(t *testing.T) {
 		tries:  0,
 		events: []*Event{},
 	}
-	queue := New(mockExec, 1, 1, 1*time.Second)
+	queue := New(mockExec, queueOpts)
 	defer queue.ShutDownWithDrain()
 	go queue.StartQueueWorkerPool()
 	for _, event := range basicEvents {
@@ -79,7 +84,7 @@ func TestQueueWorkerRetry(t *testing.T) {
 		tries:  0,
 		events: []*Event{},
 	}
-	queue := New(mockExec, 1, 3, 100*time.Microsecond)
+	queue := New(mockExec, queueOpts)
 	defer queue.ShutDownWithDrain()
 	for _, event := range retryTest {
 		queue.Add(event)

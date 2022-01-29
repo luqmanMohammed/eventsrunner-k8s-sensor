@@ -194,7 +194,7 @@ func setupSensor() *Sensor {
 		KubeConfig:                     config,
 		SensorLabel:                    "k8s",
 		LoadObjectsDurationBeforeStart: time.Second * 0,
-	})
+	}, &eventqueue.MockQueueExecutor{})
 	return sensor
 }
 
