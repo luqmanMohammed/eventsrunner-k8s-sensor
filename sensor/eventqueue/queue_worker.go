@@ -33,6 +33,7 @@ type EventQueue struct {
 	executor     QueueExecutor
 }
 
+// Creates a New EventQueue and returns the pointer to it.
 func New(executor QueueExecutor, workerCount int, maxTryCount int, requeueDelay time.Duration) *EventQueue {
 	eq := &EventQueue{
 		DelayingInterface: workqueue.NewDelayingQueue(),
