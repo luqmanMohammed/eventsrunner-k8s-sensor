@@ -19,7 +19,8 @@ var (
 	ErrFileIsNotExecutable = errors.New("file is not executable")
 )
 
-// ScriptExecutor is an implementation of QueueItemExecutor interface
+// ScriptExecutor is an implementation of QueueExecutor 
+// interface int the eventqueue package.
 // which is used to execute a script.
 // Scripts should be in the following naming convention
 // <ScriptDir>/<ScriptPrefix>-<RuleID>.sh .
