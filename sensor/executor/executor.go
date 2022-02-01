@@ -19,7 +19,7 @@ var (
 	ErrFileIsNotExecutable = errors.New("file is not executable")
 )
 
-// ScriptExecutor is an implementation of QueueExecutor 
+// ScriptExecutor is an implementation of QueueExecutor
 // interface int the eventqueue package.
 // which is used to execute a script.
 // Scripts should be in the following naming convention
@@ -30,8 +30,16 @@ var (
 // Implemented as a Proof of Concept. Passing on the event to eventsrunner
 // will be more scalable, easier to maintain and secure.
 type ScriptExecutor struct {
-	ScriptDir    string
-	ScriptPrefix string
+	scriptDir    string
+	scriptPrefix string
+}
+
+// NewScriptExecutor creates a new instance of ScriptExecutor.
+func NewScriptExecutor(scriptDir, scriptPrefix string) *ScriptExecutor {
+	return &ScriptExecutor{
+		scriptDir:    scriptDir,
+		scriptPrefix: scriptPrefix,
+	}
 }
 
 // Execute executes the script for the given event.
@@ -44,7 +52,7 @@ type ScriptExecutor struct {
 // OS STDOUT and STDERR will be used for the script.
 // TODO: Add file STDOUT and STDERR for scripts
 func (se *ScriptExecutor) Execute(event *eventqueue.Event) error {
-	script := fmt.Sprintf("%s/%s-%s.sh", se.ScriptDir, se.ScriptPrefix, event.RuleID)
+	script := fmt.Sprintf("%s/%s-%s.sh", se.scriptDir, se.scriptPrefix, event.RuleID)
 	klog.V(3).Infof("Executing script %s", script)
 	if fileInfo, err := os.Stat(script); err != nil {
 		return err

@@ -2,6 +2,8 @@ name: Build and Test
 on:
   pull_request:
     branches: [main]
+  push:
+    branches: [main]
 
 env:
   go_version: 1.17
@@ -32,7 +34,7 @@ jobs:
       actions: read
       contents: read
       security-events: write
-    if: ${{ !contains(github.event.issue.labels.*.name, 'dependencies') }}
+    if: ${{ !contains(github.event.pull_request.labels.*.name, 'dependencies') }}
     steps:
       - uses: actions/checkout@v2
       - uses: actions/setup-go@v2
@@ -61,9 +63,9 @@ jobs:
     strategy:
       matrix:
         k3s_k8s_image:
-          - rancher/k3s:v1.23.1-rc1-k3s1
-          - rancher/k3s:v1.22.5-k3s1
-          - rancher/k3s:v1.21.8-k3s1
+          - rancher/k3s:v1.23.3-k3s1
+          - rancher/k3s:v1.22.6-k3s1
+          - rancher/k3s:v1.21.9-k3s1
       fail-fast: false
     steps:
       - uses: actions/checkout@v2
