@@ -26,8 +26,7 @@ var (
 		},
 	}
 
-	test_script = 
-`#!/bin/bash
+	test_script = `#!/bin/bash
 
 # Check if EVENT environment variable is set
 if [ -z "$EVENT" ]; then
@@ -72,10 +71,7 @@ func TestScriptExecutor(t *testing.T) {
 	}()
 
 	t.Run("should execute script", func(t *testing.T) {
-		se := &ScriptExecutor{
-			ScriptDir:    "/tmp",
-			ScriptPrefix: "script",
-		}
+		se := NewScriptExecutor("/tmp", "script")
 		event := test_event
 		err = se.Execute(event)
 		if err != nil {
