@@ -120,15 +120,16 @@ func TestMTLSAuthProcessEvent(t *testing.T) {
 	}()
 
 	ercOpts := EventsRunnerClientOpts{
-		CaCertPath:     "/tmp/test-pki/ca.crt",
-		ClientKeyPath:  "/tmp/test-pki/client.key",
-		ClientCertPath: "/tmp/test-pki/client.crt",
-		RequestTimeout: time.Minute,
+		EventsRunnerBaseURL: "https://localhost:8080",
+		CaCertPath:          "/tmp/test-pki/ca.crt",
+		ClientKeyPath:       "/tmp/test-pki/client.key",
+		ClientCertPath:      "/tmp/test-pki/client.crt",
+		RequestTimeout:      time.Minute,
 	}
 	server := setupSetupMockServer(tls.RequireAndVerifyClientCert)
 	go server.ListenAndServeTLS("/tmp/test-pki/server.crt", "/tmp/test-pki/server.key")
 	defer server.Close()
-	erClient, err := NewMTLSClient("https://localhost:8080/api/v1/events/", ercOpts)
+	erClient, err := NewMTLSClient(ercOpts)
 	if err != nil {
 		t.Fatalf("Failed to create MTLS client due to: %v", err)
 	}

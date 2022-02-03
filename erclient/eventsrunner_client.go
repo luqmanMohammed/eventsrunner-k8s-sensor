@@ -15,20 +15,21 @@ import (
 )
 
 type EventsRunnerClientOpts struct {
-	CaCertPath     string
-	ClientKeyPath  string
-	ClientCertPath string
-	RequestTimeout time.Duration
-	JWTToken       string
+	EventsRunnerBaseURL string
+	CaCertPath          string
+	ClientKeyPath       string
+	ClientCertPath      string
+	RequestTimeout      time.Duration
+	JWTToken            string
 }
 
 type EventsRunnerClient struct {
-	eventsRunnerURI string
-	httpClient      *http.Client
-	headers         map[string]string
+	eventsRunnerBaseURL string
+	httpClient          *http.Client
+	headers             map[string]string
 }
 
-func NewMTLSClient(erURI string, erClientOpts EventsRunnerClientOpts) (*EventsRunnerClient, error) {
+func NewMTLSClient(erClientOpts EventsRunnerClientOpts) (*EventsRunnerClient, error) {
 	caCert, err := ioutil.ReadFile(erClientOpts.CaCertPath)
 	if err != nil {
 		return nil, err
@@ -58,9 +59,9 @@ func NewMTLSClient(erURI string, erClientOpts EventsRunnerClientOpts) (*EventsRu
 	headers["Content-Type"] = "application/json"
 
 	return &EventsRunnerClient{
-		eventsRunnerURI: erURI,
-		httpClient:      httpClient,
-		headers:         headers,
+		eventsRunnerBaseURL: erClientOpts.EventsRunnerBaseURL,
+		httpClient:          httpClient,
+		headers:             headers,
 	}, nil
 }
 
@@ -69,7 +70,8 @@ func (er EventsRunnerClient) ProcessEvent(event *eventqueue.Event) error {
 	if err != nil {
 		return err
 	}
-	req, err := http.NewRequest("POST", er.eventsRunnerURI, bytes.NewBuffer(eventJson))
+	requestURI := fmt.Sprintf("%s/api/v1/events", er.eventsRunnerBaseURL)
+	req, err := http.NewRequest("POST", requestURI, bytes.NewBuffer(eventJson))
 	if err != nil {
 		return err
 	}
