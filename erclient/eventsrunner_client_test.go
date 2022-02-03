@@ -85,17 +85,21 @@ openssl x509 -req -in  /tmp/test-pki/client.csr -CA /tmp/test-pki/ca.crt -CAkey 
 )
 
 func setupTLS() error {
-	cmd := exec.Command("sh", "-c", test_ca_pki_cert_script)
-	file, err := os.OpenFile(os.DevNull, os.O_RDWR, os.ModeAppend)
-	if err != nil {
-		return err
+	if _, err := os.Stat("/tmp/test-pki"); os.IsNotExist(err) {
+		cmd := exec.Command("sh", "-c", test_ca_pki_cert_script)
+		file, err := os.OpenFile(os.DevNull, os.O_RDWR, os.ModeAppend)
+		if err != nil {
+			return err
+		}
+		cmd.Stdout = file
+		cmd.Stderr = file
+		time.Sleep(3 * time.Second)
+		return cmd.Run()
 	}
-	cmd.Stdout = file
-	cmd.Stderr = file
-	return cmd.Run()
+	return nil
 }
 
-func setupSetupMockServer(clientAuth tls.ClientAuthType) *http.Server {
+func setupSetupMockServer(clientAuth tls.ClientAuthType, port string) *http.Server {
 	caCert, err := ioutil.ReadFile("/tmp/test-pki/ca.crt")
 	if err != nil {
 		panic("Failed to read CA cert:" + err.Error())
@@ -112,7 +116,7 @@ func setupSetupMockServer(clientAuth tls.ClientAuthType) *http.Server {
 		rw.WriteHeader(http.StatusOK)
 	})
 	server := &http.Server{
-		Addr:      ":8080",
+		Addr:      ":" + port,
 		TLSConfig: tlsConfig,
 		Handler:   mockMux,
 	}
@@ -124,10 +128,6 @@ func TestMutualTLSAuthProcessEvent(t *testing.T) {
 	if err := setupTLS(); err != nil {
 		t.Fatalf("Failed to setup TLS due to: %v", err)
 	}
-	defer func() {
-		os.RemoveAll("/tmp/test-pki")
-	}()
-
 	ercOpts := EventsRunnerClientOpts{
 		EventsRunnerBaseURL: "https://localhost:8080",
 		CaCertPath:          "/tmp/test-pki/ca.crt",
@@ -135,7 +135,7 @@ func TestMutualTLSAuthProcessEvent(t *testing.T) {
 		ClientCertPath:      "/tmp/test-pki/client.crt",
 		RequestTimeout:      time.Minute,
 	}
-	server := setupSetupMockServer(tls.RequireAndVerifyClientCert)
+	server := setupSetupMockServer(tls.RequireAndVerifyClientCert, "8080")
 	go server.ListenAndServeTLS("/tmp/test-pki/server.crt", "/tmp/test-pki/server.key")
 	time.Sleep(2 * time.Second)
 	erClient, err := NewMutualTLSClient(&ercOpts)
@@ -152,17 +152,13 @@ func TestJWTAuthProcessEvent(t *testing.T) {
 	if err := setupTLS(); err != nil {
 		t.Fatalf("Failed to setup TLS due to: %v", err)
 	}
-	defer func() {
-		os.RemoveAll("/tmp/test-pki")
-	}()
-
 	ercOpts := EventsRunnerClientOpts{
-		EventsRunnerBaseURL: "https://localhost:8080",
+		EventsRunnerBaseURL: "https://localhost:8081",
 		RequestTimeout:      time.Minute,
 		JWTToken:            "test-secret",
 		CaCertPath:          "/tmp/test-pki/ca.crt",
 	}
-	server := setupSetupMockServer(tls.NoClientCert)
+	server := setupSetupMockServer(tls.NoClientCert, "8081")
 	mockMux := http.NewServeMux()
 	mockMux.HandleFunc("/api/v1/events/", func(rw http.ResponseWriter, r *http.Request) {
 		t.Log("JWT Mock server got request")
