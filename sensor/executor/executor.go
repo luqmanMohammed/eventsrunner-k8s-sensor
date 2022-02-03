@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 
+	"github.com/luqmanMohammed/eventsrunner-k8s-sensor/erclient"
 	"github.com/luqmanMohammed/eventsrunner-k8s-sensor/sensor/eventqueue"
 	"k8s.io/klog/v2"
 )
@@ -20,7 +21,7 @@ var (
 )
 
 // ScriptExecutor is an implementation of QueueExecutor
-// interface int the eventqueue package.
+// interface in the eventqueue package.
 // which is used to execute a script.
 // Scripts should be in the following naming convention
 // <ScriptDir>/<ScriptPrefix>-<RuleID>.sh .
@@ -73,4 +74,29 @@ func (se *ScriptExecutor) Execute(event *eventqueue.Event) error {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
+}
+
+// EventsRunnerExecutor is an implementation of QueueExecutor interface
+// in the eventqueue package.
+// It utilizes the eventsrunner client to send events to the eventsrunner.
+type EventsRunnerExecutor struct {
+	eventsRunnerClient *erclient.EventsRunnerClient
+}
+
+// NewEventsRunnerExecutor creates a new instance of EventsRunnerExecutor.
+// authType determines the type of authentication to be used by the client
+// to communicate with the server.
+func NewEventsRunnerExecutor(authType erclient.AuthType, eventsRunnerOpts *erclient.EventsRunnerClientOpts) (*EventsRunnerExecutor, error) {
+	eventsRunnerClient, err := erclient.New(authType, eventsRunnerOpts)
+	if err != nil {
+		return nil, err
+	}
+	return &EventsRunnerExecutor{
+		eventsRunnerClient: eventsRunnerClient,
+	}, nil
+}
+
+// Execute sends the event to the eventsrunner.
+func (ere EventsRunnerExecutor) Execute(event *eventqueue.Event) error {
+	return ere.eventsRunnerClient.ProcessEvent(event)
 }
