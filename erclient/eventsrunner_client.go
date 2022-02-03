@@ -16,6 +16,14 @@ import (
 	"k8s.io/klog/v2"
 )
 
+// AuthType to determine the authentication type
+type AuthType string
+
+const (
+	mTLS AuthType = "mTLS"
+	JWT  AuthType = "jwt"
+)
+
 // RequiredFieldMissingError custom error is returned when required field is missing.
 // Missing field is present as part of the error struct
 type RequiredFieldMissingError struct {
@@ -179,6 +187,15 @@ func NewJWTClient(erClientOpts *EventsRunnerClientOpts) (*EventsRunnerClient, er
 		httpClient:          httpClient,
 		headers:             headers,
 	}, nil
+}
+
+// New creates a new EventsRunnerClient with the provided options.
+// Authentication mode is determined by the authType argument.
+func New(authType AuthType, erClientOpts *EventsRunnerClientOpts) (*EventsRunnerClient, error) {
+	if authType == mTLS {
+		return NewMutualTLSClient(erClientOpts)
+	}
+	return NewJWTClient(erClientOpts)
 }
 
 // ProcessEvent sends an event to the EventsRunner server, and will wait
