@@ -1,4 +1,4 @@
-package erclient
+package client
 
 import (
 	"crypto/tls"
