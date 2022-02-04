@@ -138,7 +138,7 @@ func TestMutualTLSAuthProcessEvent(t *testing.T) {
 	server := setupSetupMockServer(tls.RequireAndVerifyClientCert, "8080")
 	go server.ListenAndServeTLS("/tmp/test-pki/server.crt", "/tmp/test-pki/server.key")
 	time.Sleep(2 * time.Second)
-	erClient, err := NewMutualTLSClient(&ercOpts)
+	erClient, err := New(mTLS, &ercOpts)
 	if err != nil {
 		t.Fatalf("Failed to create MutualTLS client due to: %v", err)
 	}
@@ -172,7 +172,7 @@ func TestJWTAuthProcessEvent(t *testing.T) {
 	server.ErrorLog = log.New(os.Stdout, "", 0)
 	go server.ListenAndServeTLS("/tmp/test-pki/server.crt", "/tmp/test-pki/server.key")
 	time.Sleep(2 * time.Second)
-	erClient, err := NewJWTClient(&ercOpts)
+	erClient, err := New(JWT, &ercOpts)
 	if err != nil {
 		t.Fatalf("Failed to create JWT client due to: %v", err)
 	}
