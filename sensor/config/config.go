@@ -19,8 +19,8 @@ func (rf *RequiredConfigMissingError) Error() string {
 
 func AnyRequestedConfigMissing(configs map[string]interface{}) error {
 	missingConfig := utils.FindZeroValue(configs)
-	if missingConfig == "" {
-		return &RequiredConfigMissingError{missingConfig}
+	if missingConfig != "" {
+		return &RequiredConfigMissingError{ConfigName: missingConfig}
 	}
 	return nil
 }
