@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/luqmanMohammed/eventsrunner-k8s-sensor/sensor/eventqueue"
+	"github.com/luqmanMohammed/eventsrunner-k8s-sensor/sensor/executor"
 	"github.com/luqmanMohammed/eventsrunner-k8s-sensor/sensor/rules"
 	"github.com/luqmanMohammed/eventsrunner-k8s-sensor/utils"
 
@@ -195,7 +196,7 @@ func setupSensor() *Sensor {
 		KubeConfig:                     config,
 		SensorLabel:                    "k8s",
 		LoadObjectsDurationBeforeStart: time.Second * 0,
-	}, &eventqueue.MockQueueExecutor{})
+	}, &executor.LogExecutor{})
 	return sensor
 }
 

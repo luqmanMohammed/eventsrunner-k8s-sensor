@@ -20,6 +20,21 @@ var (
 	ErrFileIsNotExecutable = errors.New("file is not executable")
 )
 
+// Executor interface should be implemented by all executors.
+// Executor interface is compatible with the QueueExecutor interface in eventqueue package.
+type Executor interface {
+	Execute(event *eventqueue.Event) error
+}
+
+const (
+	SCRIPT ExecutorType = "script"
+	ER     ExecutorType = "eventsrunner"
+	LOG    ExecutorType = "log"
+)
+
+// ExecutorType is the type of the executor.
+type ExecutorType string
+
 // ScriptExecutor is an implementation of QueueExecutor
 // interface in the eventqueue package.
 // which is used to execute a script.
@@ -97,6 +112,16 @@ func NewEventsRunnerExecutor(authType erclient.AuthType, eventsRunnerOpts *ercli
 }
 
 // Execute sends the event to the eventsrunner.
-func (ere EventsRunnerExecutor) Execute(event *eventqueue.Event) error {
+func (ere *EventsRunnerExecutor) Execute(event *eventqueue.Event) error {
 	return ere.eventsRunnerClient.ProcessEvent(event)
+}
+
+// LogExecutor is the simplest executor which will just log the event.
+// It is used for testing purposes.
+// Compatible with the Executor Interface
+type LogExecutor struct{}
+
+func (le *LogExecutor) Execute(event *eventqueue.Event) error {
+	klog.V(3).Infof("Executing log executor for rule: %s", event.RuleID)
+	return nil
 }
