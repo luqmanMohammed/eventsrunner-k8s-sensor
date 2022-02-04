@@ -1,14 +1,16 @@
-package rules
+package validator
 
 import (
 	"errors"
 	"strings"
+
+	"github.com/luqmanMohammed/eventsrunner-k8s-sensor/sensor/rules"
 )
 
 var (
-	// ErrRuleIDNotFound is returned when a rule doesnt have an ID.
+	// ErrRuleIDNotFound is returned when a rule doesn't have an ID.
 	ErrRuleIDNotFound = errors.New("rule ID not found")
-	// ErrRuleEventTypesNotFound is returned when a rule doesnt have
+	// ErrRuleEventTypesNotFound is returned when a rule doesn't have
 	// an event types list.
 	ErrRuleEventTypesNotFound = errors.New("rule event types not found")
 	// ErrRuleEventTypesNotValid is returned when one or more event types
@@ -18,17 +20,17 @@ var (
 
 // NormalizeAndValidateRule validates and normalizes a rule.
 // Normalized by making all event types lowercase and removing duplicates.
-func NormalizeAndValidateRule(rule *Rule) error {
+func NormalizeAndValidateRule(rule *rules.Rule) error {
 	if rule.ID == "" {
 		return ErrRuleIDNotFound
 	}
 	if len(rule.EventTypes) == 0 {
 		return ErrRuleEventTypesNotFound
 	}
-	uniqueEventTypesSet := map[EventType]struct{}{}
-	normalizedEventTypes := make([]EventType, 0, len(rule.EventTypes))
+	uniqueEventTypesSet := map[rules.EventType]struct{}{}
+	normalizedEventTypes := make([]rules.EventType, 0, len(rule.EventTypes))
 	for _, eventType := range rule.EventTypes {
-		lowerEventType := EventType(strings.ToLower(string(eventType)))
+		lowerEventType := rules.EventType(strings.ToLower(string(eventType)))
 		if _, ok := uniqueEventTypesSet[lowerEventType]; ok {
 			continue
 		}
@@ -48,7 +50,7 @@ func NormalizeAndValidateRule(rule *Rule) error {
 	rule.UpdatesOn = normalizedUpdateOn
 	rule.EventTypes = normalizedEventTypes
 	for _, eventType := range rule.EventTypes {
-		if eventType != ADDED && eventType != MODIFIED && eventType != DELETED {
+		if eventType != rules.ADDED && eventType != rules.MODIFIED && eventType != rules.DELETED {
 			return ErrRuleEventTypesNotValid
 		}
 	}

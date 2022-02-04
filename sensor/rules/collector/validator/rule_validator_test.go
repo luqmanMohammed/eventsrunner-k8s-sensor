@@ -1,28 +1,30 @@
-package rules
+package validator
 
 import (
 	"testing"
+
+	"github.com/luqmanMohammed/eventsrunner-k8s-sensor/sensor/rules"
 )
 
 var (
-	ruleMissingID = Rule{
-		EventTypes: []EventType{ADDED},
+	ruleMissingID = rules.Rule{
+		EventTypes: []rules.EventType{rules.ADDED},
 	}
-	ruleMissingEventsTypes = Rule{
+	ruleMissingEventsTypes = rules.Rule{
 		ID: "test-rule",
 	}
-	ruleInvalidEventTypes = Rule{
+	ruleInvalidEventTypes = rules.Rule{
 		ID:         "test-rule",
-		EventTypes: []EventType{EventType("INVALID")},
+		EventTypes: []rules.EventType{rules.EventType("INVALID")},
 	}
-	ruleNormalized = Rule{
+	ruleNormalized = rules.Rule{
 		ID:         "test-rule",
-		EventTypes: []EventType{EventType("ADDED"), EventType("added"), ADDED},
+		EventTypes: []rules.EventType{rules.EventType("ADDED"), rules.EventType("added"), rules.ADDED},
 	}
 )
 
 func TestRuleNormalizationAndValidation(t *testing.T) {
-	ruleTestFunc := func(rule *Rule, expectedErr error) {
+	ruleTestFunc := func(rule *rules.Rule, expectedErr error) {
 		if err := NormalizeAndValidateRule(rule); err != expectedErr {
 			t.Fatalf("Expected error %v got %v", expectedErr, err)
 		}
@@ -36,7 +38,7 @@ func TestRuleNormalizationAndValidation(t *testing.T) {
 	if len(ruleNormalized.EventTypes) != 1 {
 		t.Fatal("Rule should have only one event type after normalization")
 	}
-	if ruleNormalized.EventTypes[0] != ADDED {
+	if ruleNormalized.EventTypes[0] != rules.ADDED {
 		t.Fatal("Rule should have ADDED event type after normalization")
 	}
 }

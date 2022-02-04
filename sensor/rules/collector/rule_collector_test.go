@@ -1,10 +1,11 @@
-package rules
+package collector
 
 import (
 	"context"
 	"testing"
 	"time"
 
+	"github.com/luqmanMohammed/eventsrunner-k8s-sensor/sensor/rules"
 	"github.com/luqmanMohammed/eventsrunner-k8s-sensor/utils"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -90,23 +91,23 @@ func TestStarterRuleCollectionFromMultipleConfigMaps(t *testing.T) {
 		if len(collectedRules) != 3 {
 			t.Fatalf("Expected 3 rules, got %d", len(collectedRules))
 		}
-		if collectedRules["basic-namespace-rule"].EventTypes[0] != ADDED {
-			t.Fatalf("Expected event type %s, got %s", ADDED, collectedRules["basic-namespace-rule"].EventTypes[0])
+		if collectedRules["basic-namespace-rule"].EventTypes[0] != rules.ADDED {
+			t.Fatalf("Expected event type %s, got %s", rules.ADDED, collectedRules["basic-namespace-rule"].EventTypes[0])
 		}
 	}
 }
 
 type mockServer struct {
-	Rules map[RuleID]*Rule
+	Rules map[rules.RuleID]*rules.Rule
 }
 
-func (ms *mockServer) ReloadRules(sensorRules map[RuleID]*Rule) {
+func (ms *mockServer) ReloadRules(sensorRules map[rules.RuleID]*rules.Rule) {
 	ms.Rules = sensorRules
 }
 
-func TestContinousRuleCollection(t *testing.T) {
+func TestContinuosRuleCollection(t *testing.T) {
 	ms := &mockServer{}
-	checkRules := func(ruleID RuleID, retry int) bool {
+	checkRules := func(ruleID rules.RuleID, retry int) bool {
 		retryCount := 0
 		for {
 			if len(ms.Rules) > 0 {
