@@ -35,10 +35,18 @@ type ExecutorOpts struct {
 	client.EventsRunnerClientOpts
 }
 
+// New creates a new instance of the executor and returns it.
+// It will error out if the executor type is not supported.
+// Supported executor types are:
+// - script
+// - eventsrunner
+// - log
+// If the required config is not provided for the specific executor,
+// New method will error out.
 func New(exType ExecutorType, exOpts ExecutorOpts) (Executor, error) {
 	switch exType {
 	case SCRIPT:
-		return script.New(exOpts.ScriptDir, exOpts.ScriptPrefix), nil
+		return script.New(exOpts.ScriptDir, exOpts.ScriptPrefix)
 	case ER:
 		return eventsrunner.New(exOpts.AuthType, &exOpts.EventsRunnerClientOpts)
 	case LOG:

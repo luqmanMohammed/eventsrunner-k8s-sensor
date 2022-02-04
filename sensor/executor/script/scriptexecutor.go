@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 
+	"github.com/luqmanMohammed/eventsrunner-k8s-sensor/sensor/config"
 	"github.com/luqmanMohammed/eventsrunner-k8s-sensor/sensor/eventqueue"
 	"k8s.io/klog/v2"
 )
@@ -35,11 +36,17 @@ type ScriptExecutor struct {
 }
 
 // NewScriptExecutor creates a new instance of ScriptExecutor.
-func New(scriptDir, scriptPrefix string) *ScriptExecutor {
+func New(scriptDir, scriptPrefix string) (*ScriptExecutor, error) {
+	if err := config.AnyRequestedConfigMissing(map[string]interface{}{
+		"ScriptDir":    scriptDir,
+		"ScriptPrefix": scriptPrefix,
+	}); err != nil {
+		return nil, err
+	}
 	return &ScriptExecutor{
 		scriptDir:    scriptDir,
 		scriptPrefix: scriptPrefix,
-	}
+	}, nil
 }
 
 // Execute executes the script for the given event.
