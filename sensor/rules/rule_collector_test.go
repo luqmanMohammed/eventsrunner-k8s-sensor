@@ -49,11 +49,7 @@ var (
 
 func setupRuleCollector() *ConfigMapRuleCollector {
 	config := utils.GetKubeAPIConfigOrDie("")
-	return &ConfigMapRuleCollector{
-		clientSet:                kubernetes.NewForConfigOrDie(config),
-		sensorNamespace:          "default",
-		sensorRuleConfigMapLabel: "er-sensor-rules=true",
-	}
+	return NewConfigMapRuleCollector(kubernetes.NewForConfigOrDie(config), "default", "er-sensor-rules=true")
 }
 
 func addRuleConfigMap(configMapName string, strRule string) error {

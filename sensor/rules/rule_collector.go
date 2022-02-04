@@ -20,10 +20,13 @@ type SensorReloadInterface interface {
 	ReloadRules(sensorRules map[RuleID]*Rule)
 }
 
-// RuleCollector absracts all types of rule collectors.
-type RuleCollector interface {
-	Collect(ctx context.Context) (map[RuleID]*Rule, error)
-	StartRuleCollector(ctx context.Context, sensorRI SensorReloadInterface)
+// NewConfigMapRuleCollector returns a new ConfigMapRuleCollector.
+func NewConfigMapRuleCollector(clientSet *kubernetes.Clientset, sensorNamespace string, sensorRuleConfigMapLabel string) *ConfigMapRuleCollector {
+	return &ConfigMapRuleCollector{
+		clientSet:                clientSet,
+		sensorNamespace:          sensorNamespace,
+		sensorRuleConfigMapLabel: sensorRuleConfigMapLabel,
+	}
 }
 
 // ConfigMapRuleCollector is used to collect rules from a kubernetes configmap
@@ -64,7 +67,6 @@ func (cmrc ConfigMapRuleCollector) Collect(ctx context.Context) (map[RuleID]*Rul
 // Each rule should contain a valid rule ID, else rule wont be processed.
 // If any errors are found during json decoding, error will be logged and the
 // function will continue executing.
-// TODO: Add proper rule validation
 func (cmrc ConfigMapRuleCollector) parseCollectedConfigMapsIntoRules(cmList []v1.ConfigMap) map[RuleID]*Rule {
 	rules := make(map[RuleID]*Rule)
 	for _, cm := range cmList {
