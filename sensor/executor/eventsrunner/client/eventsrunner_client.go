@@ -1,4 +1,4 @@
-package erclient
+package client
 
 import (
 	"bytes"
@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/luqmanMohammed/eventsrunner-k8s-sensor/sensor/config"
 	"github.com/luqmanMohammed/eventsrunner-k8s-sensor/sensor/eventqueue"
 	"k8s.io/klog/v2"
 )
@@ -23,17 +24,6 @@ const (
 	mTLS AuthType = "mTLS"
 	JWT  AuthType = "jwt"
 )
-
-// RequiredFieldMissingError custom error is returned when required field is missing.
-// Missing field is present as part of the error struct
-type RequiredFieldMissingError struct {
-	field string
-}
-
-// Error function implements error interface
-func (rf *RequiredFieldMissingError) Error() string {
-	return fmt.Sprintf("required field %s is missing", rf.field)
-}
 
 // EventsRunnerClientOpts is a struct that contains the options for the EventsRunnerClient
 // If mTLS Auth Client is used, the following options are required:
@@ -58,33 +48,6 @@ type EventsRunnerClient struct {
 	eventsRunnerBaseURL string
 	httpClient          *http.Client
 	headers             map[string]string
-}
-
-// validateBaseRequirements Validates that the base requirements for both
-// authentication flows are met
-func validateBaseRequirements(erClientOpts *EventsRunnerClientOpts) error {
-	if erClientOpts == nil {
-		return &RequiredFieldMissingError{field: "all"}
-	}
-	if erClientOpts.EventsRunnerBaseURL == "" {
-		return &RequiredFieldMissingError{field: "EventsRunnerBaseURL"}
-	}
-	return nil
-}
-
-// validateMutualTLSAuthRequirements Validates that the required fields for
-// mutual TLS authentication are present
-func validateMutualTLSAuthRequirements(erClientOpts *EventsRunnerClientOpts) error {
-	if erClientOpts.CaCertPath == "" {
-		return &RequiredFieldMissingError{field: "CaCertPath"}
-	}
-	if erClientOpts.ClientCertPath == "" {
-		return &RequiredFieldMissingError{field: "ClientCertPath"}
-	}
-	if erClientOpts.ClientKeyPath == "" {
-		return &RequiredFieldMissingError{field: "ClientKeyPath"}
-	}
-	return nil
 }
 
 // createTLSConfig creates a TLS config based on the provided CA cert path,
@@ -116,13 +79,7 @@ func createTLSConfig(caCertPath, clientKeyPath, clientCertPath string) (*tls.Con
 // NewMutualTLSAuthClient creates a new EventsRunnerClient with mutual TLS authentication.
 // Configures the client to use the provided CA cert path, client key path and client cert path.
 // If JWT Token is provided, it will be added in the request Authorization header.
-func NewMutualTLSClient(erClientOpts *EventsRunnerClientOpts) (*EventsRunnerClient, error) {
-	if err := validateBaseRequirements(erClientOpts); err != nil {
-		return nil, err
-	}
-	if err := validateMutualTLSAuthRequirements(erClientOpts); err != nil {
-		return nil, err
-	}
+func newMutualTLSClient(erClientOpts *EventsRunnerClientOpts) (*EventsRunnerClient, error) {
 	tlsConfig, err := createTLSConfig(erClientOpts.CaCertPath, erClientOpts.ClientKeyPath, erClientOpts.ClientCertPath)
 	if err != nil {
 		return nil, err
@@ -150,28 +107,20 @@ func NewMutualTLSClient(erClientOpts *EventsRunnerClientOpts) (*EventsRunnerClie
 // If the server is HTTPS, CACertPath Option is required, the client will use
 // the provided CA cert for server certificate verification.
 // If all required options for mTLS are provided, client will use them.
-func NewJWTClient(erClientOpts *EventsRunnerClientOpts) (*EventsRunnerClient, error) {
-	if err := validateBaseRequirements(erClientOpts); err != nil {
-		return nil, err
-	}
+func newJWTClient(erClientOpts *EventsRunnerClientOpts, tryMTLS bool, httpsEndpoint bool) (*EventsRunnerClient, error) {
 	var tlsConfig *tls.Config
-	if err := validateMutualTLSAuthRequirements(erClientOpts); err == nil {
+	if tryMTLS {
+		var err error
 		tlsConfig, err = createTLSConfig(erClientOpts.CaCertPath, erClientOpts.ClientKeyPath, erClientOpts.ClientCertPath)
 		if err != nil {
 			klog.V(2).Infof("TLS config was provided but failed to create: %v", err)
 		}
-	} else if strings.HasPrefix(erClientOpts.EventsRunnerBaseURL, "https") {
-		if erClientOpts.CaCertPath == "" {
-			return nil, &RequiredFieldMissingError{field: "CaCertPath"}
-		}
+	} else if httpsEndpoint {
 		var err error
 		tlsConfig, err = createTLSConfig(erClientOpts.CaCertPath, "", "")
 		if err != nil {
 			return nil, err
 		}
-	}
-	if erClientOpts.JWTToken == "" {
-		return nil, &RequiredFieldMissingError{field: "JWTToken"}
 	}
 	headers := make(map[string]string)
 	headers["Authorization"] = "Bearer " + erClientOpts.JWTToken
@@ -192,10 +141,41 @@ func NewJWTClient(erClientOpts *EventsRunnerClientOpts) (*EventsRunnerClient, er
 // New creates a new EventsRunnerClient with the provided options.
 // Authentication mode is determined by the authType argument.
 func New(authType AuthType, erClientOpts *EventsRunnerClientOpts) (*EventsRunnerClient, error) {
-	if authType == mTLS {
-		return NewMutualTLSClient(erClientOpts)
+	mTLSRequirementsErr := config.AnyRequestedConfigMissing(map[string]interface{}{
+		"CaCertPath":     erClientOpts.CaCertPath,
+		"ClientKeyPath":  erClientOpts.ClientKeyPath,
+		"ClientCertPath": erClientOpts.ClientCertPath,
+	})
+	if authType == "" {
+		return nil, &config.RequiredConfigMissingError{ConfigName: "authType"}
 	}
-	return NewJWTClient(erClientOpts)
+	if basicRequirementErr := config.AnyRequestedConfigMissing(map[string]interface{}{
+		"EventsRunnerBaseURL": erClientOpts.EventsRunnerBaseURL,
+	}); basicRequirementErr != nil {
+		return nil, basicRequirementErr
+	}
+	if authType == JWT {
+		if jwtRequirementsErr := config.AnyRequestedConfigMissing(map[string]interface{}{
+			"JWTToken": erClientOpts.JWTToken,
+		}); jwtRequirementsErr != nil {
+			return nil, jwtRequirementsErr
+		}
+		if strings.HasPrefix(erClientOpts.EventsRunnerBaseURL, "https") {
+			if httpsRequirementsErr := config.AnyRequestedConfigMissing(map[string]interface{}{
+				"CaCertPath": erClientOpts.CaCertPath,
+			}); httpsRequirementsErr != nil {
+				return nil, httpsRequirementsErr
+			}
+		}
+		return newJWTClient(erClientOpts, mTLSRequirementsErr == nil, strings.HasPrefix(erClientOpts.EventsRunnerBaseURL, "https"))
+
+	} else if authType == mTLS {
+		if mTLSRequirementsErr != nil {
+			return nil, mTLSRequirementsErr
+		}
+		return newMutualTLSClient(erClientOpts)
+	}
+	return nil, fmt.Errorf("authType %s is not supported", authType)
 }
 
 // ProcessEvent sends an event to the EventsRunner server, and will wait

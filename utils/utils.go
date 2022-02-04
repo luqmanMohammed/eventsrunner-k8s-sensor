@@ -1,6 +1,8 @@
 package utils
 
 import (
+	"reflect"
+
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/util/homedir"
@@ -38,4 +40,19 @@ func StringInSlice(a string, list []string) bool {
 		}
 	}
 	return false
+}
+
+// Check if provided value is its zero value
+func IsZero(value interface{}) bool {
+	return value == nil || reflect.DeepEqual(value, reflect.Zero(reflect.TypeOf(value)).Interface())
+}
+
+// Find 1st zero value in map of values and return its key else return empty string
+func FindZeroValue(values map[string]interface{}) string {
+	for k, v := range values {
+		if IsZero(v) {
+			return k
+		}
+	}
+	return ""
 }

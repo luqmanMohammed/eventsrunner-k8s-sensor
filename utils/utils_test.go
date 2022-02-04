@@ -20,3 +20,27 @@ func TestStringInSlice(t *testing.T) {
 		t.Error("Expected to not find string in slice")
 	}
 }
+
+func TestZeroValueFunction(t *testing.T) {
+	test_str := ""
+	test_int := 0
+
+	if !IsZero(test_str) {
+		t.Error("Expected to be zero value true")
+	}
+	if !IsZero(test_int) {
+		t.Error("Expected to be zero value true")
+	}
+}
+
+// TestFindZeroValue tests if FindZeroValue returns the correct key
+func TestFindZeroValue(t *testing.T) {
+	test_map := map[string]interface{}{"a": 1, "b": 2, "c": 3}
+	if key := FindZeroValue(test_map); key != "" {
+		t.Errorf("Expected to not find zero value in map, got %s", key)
+	}
+	test_map["a"] = 0
+	if key := FindZeroValue(test_map); key != "a" {
+		t.Errorf("Expected to find zero value in map, got %s", key)
+	}
+}
