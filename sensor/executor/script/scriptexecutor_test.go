@@ -71,7 +71,7 @@ func TestScriptExecutor(t *testing.T) {
 	}()
 
 	t.Run("should execute script", func(t *testing.T) {
-		se := NewScriptExecutor("/tmp", "script")
+		se := New("/tmp", "script")
 		event := test_event
 		err = se.Execute(event)
 		if err != nil {
