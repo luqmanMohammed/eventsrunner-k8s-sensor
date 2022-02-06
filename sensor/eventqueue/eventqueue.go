@@ -7,6 +7,7 @@ import (
 	"github.com/luqmanMohammed/eventsrunner-k8s-sensor/sensor/rules"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/client-go/util/workqueue"
+	"k8s.io/klog/v2"
 )
 
 // Event struct holds all information related to an event.
@@ -81,9 +82,12 @@ func (eq *EventQueue) StartQueueWorkerPool() {
 // If the Execute method returns nil, the item will be removed from the queue.
 func (eq *EventQueue) processItem(event *Event) {
 	event.tries++
+	klog.V(2).Infof("Processing event from rule %s, tries: %d", event.RuleID, event.tries)
 	err := eq.executor.Execute(event)
 	if err != nil {
+		klog.V(2).ErrorS(err, "Error during execution of event")
 		if event.tries < eq.maxTryCount {
+			klog.V(2).Info("Adding event to queue to be retried")
 			eq.DelayingInterface.AddAfter(event, eq.requeueDelay)
 		}
 	}

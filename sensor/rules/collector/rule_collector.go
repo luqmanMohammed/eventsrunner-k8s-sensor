@@ -144,7 +144,7 @@ func (cmrc ConfigMapRuleCollector) StartRuleCollector(ctx context.Context, senso
 			close(changeQueue)
 			return
 		case <-changeQueue:
-			klog.V(5).Info("Rule change detected. Parsing and reloading rules")
+			klog.V(2).Info("Rule change detected. Parsing and reloading rules")
 			configMapList := parseStoreIntoConfigMaps(informerFactory.Core().V1().ConfigMaps().Informer().GetStore())
 			ruleMap := cmrc.parseCollectedConfigMapsIntoRules(configMapList)
 			sensorRI.ReloadRules(ruleMap)

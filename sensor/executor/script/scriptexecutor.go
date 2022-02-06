@@ -60,7 +60,7 @@ func New(scriptDir, scriptPrefix string) (*ScriptExecutor, error) {
 // TODO: Add file STDOUT and STDERR for scripts
 func (se *ScriptExecutor) Execute(event *eventqueue.Event) error {
 	script := fmt.Sprintf("%s/%s-%s.sh", se.scriptDir, se.scriptPrefix, event.RuleID)
-	klog.V(3).Infof("Executing script %s", script)
+	klog.V(2).Infof("Executing script %s", script)
 	if fileInfo, err := os.Stat(script); err != nil {
 		return err
 	} else if fileInfo.IsDir() {
