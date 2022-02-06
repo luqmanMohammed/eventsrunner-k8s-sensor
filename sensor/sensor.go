@@ -192,6 +192,7 @@ func (s *Sensor) ReloadRules(sensorRules map[rules.RuleID]*rules.Rule) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 	if s.state != RUNNING {
+		klog.V(1).Info("Sensor is not running, skipping reloading rules")
 		return
 	}
 	for newRuleId, newRule := range sensorRules {
@@ -205,6 +206,8 @@ func (s *Sensor) ReloadRules(sensorRules map[rules.RuleID]*rules.Rule) {
 				ruleInf := s.registerInformerForRule(newRule)
 				s.ruleInformers[newRuleId] = ruleInf
 				ruleInf.startInformer()
+			} else {
+				klog.V(2).Infof("Rule %s is not changed, skipping reloading", newRuleId)
 			}
 		}
 	}
@@ -311,6 +314,10 @@ type SensorRuntime struct {
 	sensor        *Sensor
 	ruleCollector *collector.ConfigMapRuleCollector
 	cancelFunc    context.CancelFunc
+}
+
+func (sr *SensorRuntime) GetSensorState() SensorState {
+	return sr.sensor.state
 }
 
 // SetupSensorRuntime will setup the sensor and return a sensor runtime.

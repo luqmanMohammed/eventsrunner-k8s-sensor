@@ -1,12 +1,16 @@
 package sensor
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"fmt"
+	"io/ioutil"
+	"os"
 	"testing"
 	"time"
 
+	"github.com/luqmanMohammed/eventsrunner-k8s-sensor/sensor/config"
 	"github.com/luqmanMohammed/eventsrunner-k8s-sensor/sensor/eventqueue"
 	"github.com/luqmanMohammed/eventsrunner-k8s-sensor/sensor/executor"
 	"github.com/luqmanMohammed/eventsrunner-k8s-sensor/sensor/rules"
@@ -667,4 +671,232 @@ func TestWorkerPoolIntegration(t *testing.T) {
 	for _, event := range mockExec.events {
 		t.Logf("Event description: %s %s", event.EventType, event.Objects[0].GetName())
 	}
+}
+
+var (
+	executorScript string = `#!/bin/bash
+# Check if EVENT environment variable is set
+if [ -z "$EVENT" ]; then
+	echo "EVENT is not set"
+	exit 1
+fi
+
+# Try to base64 decode EVENT variable
+EVENT_DECODED=$(echo "$EVENT" | base64 -d)
+EVENT_DECODED_RULE_ID=$(echo "$EVENT_DECODED" | jq -r '.RuleID')
+EVENT_TYPE=$(echo "$EVENT_DECODED" | jq -r '.EventType')
+# Check if EVENT_DECODED_RULE_ID is cm-rule-1
+if [ "$EVENT_DECODED_RULE_ID" != "cm-rule-1" ]; then
+	echo "Rule ID is not cm-rule-1"
+	exit 1
+fi
+echo "$EVENT_TYPE" >> /tmp/int-test-1-1-results.txt
+exit 0
+`
+	rulesConfigMap string = `[{
+"id": "cm-rule-1",
+"group": "",
+"version": "v1",
+"resource": "configmaps",
+"namespaces": ["default"],
+"eventTypes": ["ADDED"]
+}]`
+
+	rulesUpdatedConfigMap string = `[{
+"id": "cm-rule-1",
+"group": "",
+"version": "v1",
+"resource": "configmaps",
+"namespaces": ["default"],
+"eventTypes": ["ADDED", "MODIFIED"],
+"updatesOn": ["data"]
+}]`
+)
+
+func TestSensorTotalIntegration(t *testing.T) {
+	handleErr := func(err error) {
+		if err != nil {
+			t.Fatalf("Failed to setup test: %v", err)
+		}
+	}
+	removeFileIfExists := func(filename string) {
+		if _, err := os.Stat(filename); err == nil {
+			os.Remove(filename)
+		}
+	}
+	processResults := func(resultfile string, expected []string) bool {
+		if _, err := os.Stat(resultfile); err == nil {
+			file, err := os.Open(resultfile)
+			if err != nil {
+				return false
+			}
+			scanner := bufio.NewScanner(file)
+			i := 0
+			for scanner.Scan() {
+				if scanner.Text() != expected[i] {
+					return false
+				}
+				i++
+			}
+			if i != len(expected) {
+				return false
+			}
+			if err := scanner.Err(); err != nil {
+				return false
+			}
+
+		} else {
+			return false
+		}
+		return true
+	}
+
+	// Remove previous results files if they exist
+	// Defer to remove current test results files
+	removeFileIfExists("/tmp/int-test-1-1-results.txt")
+	defer removeFileIfExists("/tmp/int-test-1-1-results.txt")
+
+	// Create executor script at /tmp/script-cm-rule-1.sh
+	err := ioutil.WriteFile("/tmp/script-cm-rule-1.sh", []byte(executorScript), 0755)
+	handleErr(err)
+	defer os.Remove("/tmp/script-cm-rule-1.sh")
+
+	// Setting up kubernetes namespace and required configmaps
+	kubeConfig := utils.GetKubeAPIConfigOrDie("")
+	ns := &v1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "eventsrunner",
+		},
+	}
+
+	// Setup test namespace and remove once test is done
+	_, err = kubernetes.NewForConfigOrDie(kubeConfig).CoreV1().Namespaces().Create(context.Background(), ns, metav1.CreateOptions{})
+	handleErr(err)
+	defer kubernetes.NewForConfigOrDie(kubeConfig).CoreV1().Namespaces().Delete(context.Background(), ns.Name, metav1.DeleteOptions{})
+
+	// Setup test configmap, will be removed automatically when namespace is removed
+	cm := &v1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "sensor-rules-1",
+			Namespace: "eventsrunner",
+			Labels: map[string]string{
+				"er-k8s-sensor-rules": "true",
+			},
+		},
+		Data: map[string]string{
+			"rules": rulesConfigMap,
+		},
+	}
+	_, err = kubernetes.NewForConfigOrDie(kubeConfig).CoreV1().ConfigMaps("eventsrunner").Create(context.Background(), cm, metav1.CreateOptions{})
+	handleErr(err)
+	configObj, err := config.ParseConfigFromViper("", 1)
+	handleErr(err)
+	configObj.ExecutorType = "script"
+	configObj.ScriptDir = "/tmp"
+	configObj.ScriptPrefix = "script"
+
+	// Setup Sensor
+	sensorRuntime, err := SetupNewSensorRuntime(configObj)
+	defer sensorRuntime.StopSensorRuntime()
+	handleErr(err)
+	go func() {
+		err := sensorRuntime.StartSensorRuntime()
+		if err != nil {
+			panic(err)
+		}
+	}()
+
+	// Make sure sensor is running before continuing
+	// Try 2 seconds to check if the sensor is running
+	if !retryFunc(func() bool {
+		return sensorRuntime.GetSensorState() == RUNNING
+	}, 2) {
+		t.Fatal("Sensor is not running")
+	}
+
+	// Rudimentary test to check if the rule was added
+	if _, ok := sensorRuntime.sensor.ruleInformers["cm-rule-1"]; !ok {
+		t.Fatal("Sensor is not watching cm-rule-1")
+	}
+
+	// Making sure the sensor dint execute any executor scripts without
+	// events or due to past or zombie events
+	if retryFunc(func() bool {
+		if _, err := os.Stat("/tmp/int-test-1-1-results.txt"); err == nil {
+			return true
+		}
+		return false
+	}, 2) {
+		t.Fatal("Sensor executed for past or zombie events")
+	}
+
+	// Test event trigger when actual object is added
+	// START
+	testCm := &v1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-cm1",
+			Namespace: "default",
+		},
+		Data: map[string]string{
+			"test-key": "test-value",
+		},
+	}
+	_, err = kubernetes.NewForConfigOrDie(kubeConfig).CoreV1().ConfigMaps("default").Create(context.Background(), testCm, metav1.CreateOptions{})
+	handleErr(err)
+	defer kubernetes.NewForConfigOrDie(kubeConfig).CoreV1().ConfigMaps("default").Delete(context.Background(), testCm.Name, metav1.DeleteOptions{})
+	if !retryFunc(func() bool {
+		return processResults("/tmp/int-test-1-1-results.txt", []string{"added"})
+	}, 5) {
+		t.Fatal("Sensor dint execute for added event")
+	}
+	// END
+
+	// Test sensor rule update and check again if the sensor triggered the executor
+	// again due to rule update
+	// START
+	cm.Data = map[string]string{
+		"rules": rulesUpdatedConfigMap,
+	}
+	_, err = kubernetes.NewForConfigOrDie(kubeConfig).CoreV1().ConfigMaps("eventsrunner").Update(context.Background(), cm, metav1.UpdateOptions{})
+	handleErr(err)
+	if !retryFunc(func() bool {
+		return len(sensorRuntime.sensor.ruleInformers["cm-rule-1"].rule.UpdatesOn) == 1
+	}, 5) {
+		t.Fatal("Sensor should have updated rule")
+	}
+	if !retryFunc(func() bool {
+		return processResults("/tmp/int-test-1-1-results.txt", []string{"added"})
+	}, 5) {
+		t.Fatal("Sensor executed again on rule update")
+	}
+	// END
+
+	// Test to make sure sensor dint execute for updates on part of the object
+	// not mentioned in the updatedOn rule config field.
+	// START
+	testCm.ObjectMeta.Labels = map[string]string{
+		"test-label": "test-value",
+	}
+	_, err = kubernetes.NewForConfigOrDie(kubeConfig).CoreV1().ConfigMaps("default").Update(context.Background(), testCm, metav1.UpdateOptions{})
+	handleErr(err)
+	if retryFunc(func() bool {
+		return processResults("/tmp/int-test-1-1-results.txt", []string{"added", "modified"})
+	}, 3) {
+		t.Fatal("Sensor executed for updates on metadata")
+	}
+	// END
+
+	// Test if sensor executed for correct update on data field of the object
+	// START
+	testCm.Data = map[string]string{
+		"test-key": "test-value-updated",
+	}
+	_, err = kubernetes.NewForConfigOrDie(kubeConfig).CoreV1().ConfigMaps("default").Update(context.Background(), testCm, metav1.UpdateOptions{})
+	handleErr(err)
+	if !retryFunc(func() bool {
+		return processResults("/tmp/int-test-1-1-results.txt", []string{"added", "modified"})
+	}, 5) {
+		t.Fatal("/tmp/int-test-1-1-results.txt should added, modified event in order")
+	}
+	// END
 }
