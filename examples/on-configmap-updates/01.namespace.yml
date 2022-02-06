@@ -1,0 +1,5 @@
+---
+APIVersion: v1
+Kind: Namespace
+metadata:
+  name: events-runner
