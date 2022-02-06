@@ -376,6 +376,5 @@ func (sr *SensorRuntime) StopOnSignal() {
 	<-signalChan
 	klog.V(1).Info("Received an interrupt, stopping sensor")
 	sr.StopSensor()
-	<-time.After(time.Second * 1)
 	klog.V(1).Info("Sensor stopped")
 }

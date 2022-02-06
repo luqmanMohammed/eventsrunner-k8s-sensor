@@ -11,6 +11,9 @@ import (
 )
 
 var (
+	// DefaultConfig is the contains all the default configs for a sensor.
+	// This config needs to be overridden by the config file or environment variables.
+	// This config uses the log executor which will only log Rules.ID of the event.
 	DefaultConfig = map[string]interface{}{
 		// Sensor Config
 		"sensorName":     "er-k8s-sensor",
@@ -40,6 +43,9 @@ var (
 	}
 )
 
+// Config struct contains all the configs for a sensor.
+// This struct will be used to Unmarshal the configs from the config file or
+// environment variables using Viper.
 type Config struct {
 	// Sensor Config
 	LogVerbosity   int
