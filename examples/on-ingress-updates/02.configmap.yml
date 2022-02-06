@@ -1,0 +1,18 @@
+---
+APIVersion: v1
+Kind: ConfigMap
+metadata:
+  name: events-runner
+  namespace: events-runner
+  labels:
+    er-k8s-sensor-rules: "true"
+data:
+  rules: |
+    [{
+    "id": "ingress-rule-1",
+    "group": "networking.k8s.io",
+    "version": "v1",
+    "resource": "ingresses",
+    "namespaces": ["default"],
+    "eventTypes": ["ADDED", "MODIFIED"],
+    }]
