@@ -193,9 +193,8 @@ func waitStartSensor(t *testing.T, sensor *Sensor, ruleSet map[rules.RuleID]*rul
 func setupSensor() *Sensor {
 	config := utils.GetKubeAPIConfigOrDie("")
 	sensor := New(&SensorOpts{
-		KubeConfig:                     config,
-		SensorLabel:                    "k8s",
-		LoadObjectsDurationBeforeStart: time.Second * 0,
+		KubeConfig: config,
+		SensorName: "k8s",
 	}, &executor.LogExecutor{})
 	return sensor
 }
@@ -603,9 +602,8 @@ func TestWorkerPoolIntegration(t *testing.T) {
 	config := utils.GetKubeAPIConfigOrDie("")
 	mockExec := &mockQueueExecutor{}
 	sensor := New(&SensorOpts{
-		KubeConfig:                     config,
-		SensorLabel:                    "k8s",
-		LoadObjectsDurationBeforeStart: time.Second * 0,
+		KubeConfig: config,
+		SensorName: "k8s",
 		EventQueueOpts: eventqueue.EventQueueOpts{
 			WorkerCount:  1,
 			MaxTryCount:  5,

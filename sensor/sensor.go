@@ -1,19 +1,28 @@
 package sensor
 
 import (
+	"context"
 	"fmt"
+	"os"
+	"os/signal"
 	"reflect"
 	"sync"
+	"syscall"
 	"time"
 
+	"github.com/luqmanMohammed/eventsrunner-k8s-sensor/sensor/config"
 	"github.com/luqmanMohammed/eventsrunner-k8s-sensor/sensor/eventqueue"
+	"github.com/luqmanMohammed/eventsrunner-k8s-sensor/sensor/executor"
+	"github.com/luqmanMohammed/eventsrunner-k8s-sensor/sensor/executor/eventsrunner/client"
 	"github.com/luqmanMohammed/eventsrunner-k8s-sensor/sensor/rules"
+	"github.com/luqmanMohammed/eventsrunner-k8s-sensor/sensor/rules/collector"
 	"github.com/luqmanMohammed/eventsrunner-k8s-sensor/utils"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/dynamic/dynamicinformer"
 	"k8s.io/client-go/informers"
+	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog/v2"
@@ -39,9 +48,8 @@ func (rr *ruleInformer) startInformer() {
 // SensorOpts holds options related to sensor configuration
 type SensorOpts struct {
 	eventqueue.EventQueueOpts
-	KubeConfig                     *rest.Config
-	SensorLabel                    string
-	LoadObjectsDurationBeforeStart time.Duration
+	KubeConfig *rest.Config
+	SensorName string
 }
 
 // Sensor struct implements kubernetes informers to sense changes
@@ -53,6 +61,7 @@ type Sensor struct {
 	Queue            *eventqueue.EventQueue
 	ruleInformers    map[rules.RuleID]*ruleInformer
 	stopChan         chan struct{}
+	sensorStarted    bool
 	lock             sync.Mutex
 }
 
@@ -173,6 +182,9 @@ func (s *Sensor) deleteFuncWrapper(ruleInf *ruleInformer) func(obj interface{}) 
 func (s *Sensor) ReloadRules(sensorRules map[rules.RuleID]*rules.Rule) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
+	if !s.sensorStarted {
+		return
+	}
 	for newRuleId, newRule := range sensorRules {
 		if oldRuleInformer, ok := s.ruleInformers[newRuleId]; !ok {
 			ruleInf := s.registerInformerForRule(newRule)
@@ -206,7 +218,7 @@ func (s *Sensor) registerInformerForRule(rule *rules.Rule) *ruleInformer {
 		0,
 		cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc},
 		dynamicinformer.TweakListOptionsFunc(func(options *metav1.ListOptions) {
-			labelSeclector := fmt.Sprintf("er-%s!=false", s.SensorLabel)
+			labelSeclector := fmt.Sprintf("%s!=ignore", s.SensorName)
 			if rule.LabelFilter != "" {
 				labelSeclector += "," + rule.LabelFilter
 			}
@@ -257,6 +269,7 @@ func (s *Sensor) Start(sensorRules map[rules.RuleID]*rules.Rule) {
 		ruleInformer.startInformer()
 		s.ruleInformers[ruleID] = ruleInformer
 	}
+	s.sensorStarted = true
 	<-s.stopChan
 }
 
@@ -278,4 +291,91 @@ func (s *Sensor) Stop() {
 	}
 	close(s.stopChan)
 	s.Queue.ShutDownWithDrain()
+}
+
+type SensorRuntime struct {
+	sensor        *Sensor
+	ruleCollector *collector.ConfigMapRuleCollector
+	cancelFunc    context.CancelFunc
+}
+
+func SetupSensor(sensorConfig *config.Config) (*SensorRuntime, error) {
+	kubeConfig, err := utils.GetKubeAPIConfig(sensorConfig.KubeConfigPath)
+	if err != nil {
+		return nil, err
+	}
+	kubeClient, err := kubernetes.NewForConfig(kubeConfig)
+	if err != nil {
+		return nil, err
+	}
+	ruleCollector := collector.NewConfigMapRuleCollector(kubeClient, sensorConfig.SensorNamespace, sensorConfig.SensorRuleConfigMapLabel)
+	executor, err := executor.New(
+		executor.ExecutorType(sensorConfig.ExecutorType),
+		executor.ExecutorOpts{
+			ScriptDir:    sensorConfig.ScriptDir,
+			ScriptPrefix: sensorConfig.ScriptPrefix,
+			AuthType:     client.AuthType(sensorConfig.AuthType),
+			EventsRunnerClientOpts: client.EventsRunnerClientOpts{
+				EventsRunnerBaseURL: sensorConfig.EventsRunnerBaseURL,
+				CaCertPath:          sensorConfig.CaCertPath,
+				ClientCertPath:      sensorConfig.ClientCertPath,
+				ClientKeyPath:       sensorConfig.ClientKeyPath,
+				JWTToken:            sensorConfig.JWTToken,
+				RequestTimeout:      sensorConfig.RequestTimeout,
+			},
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
+	sensor := New(&SensorOpts{
+		KubeConfig: kubeConfig,
+		SensorName: sensorConfig.SensorName,
+		EventQueueOpts: eventqueue.EventQueueOpts{
+			WorkerCount:  sensorConfig.WorkerCount,
+			MaxTryCount:  sensorConfig.MaxTryCount,
+			RequeueDelay: sensorConfig.RequeueDelay,
+		},
+	}, executor)
+	return &SensorRuntime{
+		sensor:        sensor,
+		ruleCollector: ruleCollector,
+		cancelFunc:    nil,
+	}, nil
+}
+
+func (sr *SensorRuntime) StartSensor() error {
+	ctx, cancelFunc := context.WithCancel(context.Background())
+	sr.cancelFunc = cancelFunc
+	sensorRules, err := sr.ruleCollector.Collect(ctx)
+	if err != nil {
+		return err
+	}
+	wg := sync.WaitGroup{}
+	wg.Add(2)
+	go func() {
+		wg.Done()
+		sr.sensor.StartSensorAndWorkerPool(sensorRules)
+	}()
+	go func() {
+		wg.Done()
+		sr.ruleCollector.StartRuleCollector(ctx, sr.sensor)
+	}()
+	wg.Wait()
+	return nil
+}
+
+func (sr *SensorRuntime) StopSensor() {
+	sr.cancelFunc()
+	sr.sensor.Stop()
+}
+
+func (sr *SensorRuntime) StopOnSignal() {
+	signalChan := make(chan os.Signal, 1)
+	signal.Notify(signalChan, syscall.SIGINT, syscall.SIGTERM)
+	<-signalChan
+	klog.V(1).Info("Received an interrupt, stopping sensor")
+	sr.StopSensor()
+	<-time.After(time.Second * 1)
+	klog.V(1).Info("Sensor stopped")
 }
