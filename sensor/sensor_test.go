@@ -673,6 +673,9 @@ func TestWorkerPoolIntegration(t *testing.T) {
 	}
 }
 
+// Total Integration tests for the sensor
+// TODO: Add more tests
+
 var (
 	executorScript string = `#!/bin/bash
 # Check if EVENT environment variable is set
