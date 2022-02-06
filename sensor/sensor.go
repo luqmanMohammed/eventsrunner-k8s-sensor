@@ -28,6 +28,15 @@ import (
 	"k8s.io/klog/v2"
 )
 
+type SensorState int
+
+const (
+	STARTING SensorState = iota
+	RUNNING
+	STOPPING
+	STOPPED
+)
+
 // ruleInformer holds information related to a rule in runtime
 // along with the informer that is responsible to listen to the
 // events for a specific rule.
@@ -61,7 +70,7 @@ type Sensor struct {
 	Queue            *eventqueue.EventQueue
 	ruleInformers    map[rules.RuleID]*ruleInformer
 	stopChan         chan struct{}
-	sensorStarted    bool
+	state            SensorState
 	lock             sync.Mutex
 }
 
@@ -182,7 +191,7 @@ func (s *Sensor) deleteFuncWrapper(ruleInf *ruleInformer) func(obj interface{}) 
 func (s *Sensor) ReloadRules(sensorRules map[rules.RuleID]*rules.Rule) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
-	if !s.sensorStarted {
+	if s.state != RUNNING {
 		return
 	}
 	for newRuleId, newRule := range sensorRules {
@@ -264,12 +273,13 @@ func (s *Sensor) registerInformerForRule(rule *rules.Rule) *ruleInformer {
 // Start is a blocking call.
 func (s *Sensor) Start(sensorRules map[rules.RuleID]*rules.Rule) {
 	klog.V(1).Info("Starting sensor")
+	s.state = STARTING
 	for ruleID, rule := range sensorRules {
 		ruleInformer := s.registerInformerForRule(rule)
 		ruleInformer.startInformer()
 		s.ruleInformers[ruleID] = ruleInformer
 	}
-	s.sensorStarted = true
+	s.state = RUNNING
 	<-s.stopChan
 }
 
@@ -285,21 +295,28 @@ func (s *Sensor) StartSensorAndWorkerPool(sensorRules map[rules.RuleID]*rules.Ru
 // Stop will block until all informers are stopped.
 // Stop will release Start call.
 func (s *Sensor) Stop() {
+	s.state = STOPPING
 	klog.V(1).Info("Stopping sensor")
 	for _, ruleInf := range s.ruleInformers {
 		close(ruleInf.stopChan)
 	}
 	close(s.stopChan)
 	s.Queue.ShutDownWithDrain()
+	s.state = STOPPED
 }
 
+// SensorRuntime sets up the sensor runtime and manages it.
+// TODO: Rework cancelFunc in rule collectors
 type SensorRuntime struct {
 	sensor        *Sensor
 	ruleCollector *collector.ConfigMapRuleCollector
 	cancelFunc    context.CancelFunc
 }
 
-func SetupSensor(sensorConfig *config.Config) (*SensorRuntime, error) {
+// SetupSensorRuntime will setup the sensor and return a sensor runtime.
+// SetupSensor will collect KubeConfig and initialize the sensor
+// to be able to start.
+func SetupNewSensorRuntime(sensorConfig *config.Config) (*SensorRuntime, error) {
 	kubeConfig, err := utils.GetKubeAPIConfig(sensorConfig.KubeConfigPath)
 	if err != nil {
 		return nil, err
@@ -344,7 +361,12 @@ func SetupSensor(sensorConfig *config.Config) (*SensorRuntime, error) {
 	}, nil
 }
 
-func (sr *SensorRuntime) StartSensor() error {
+// StartSensorRuntime will start the sensor and rule collectors for
+// auto reload of rules on rule change.
+// StartSensor will collect initial rules for the sensor.
+// StartSensor will block until the sensor is stopped using
+// StopSensor method.
+func (sr *SensorRuntime) StartSensorRuntime() error {
 	ctx, cancelFunc := context.WithCancel(context.Background())
 	sr.cancelFunc = cancelFunc
 	sensorRules, err := sr.ruleCollector.Collect(ctx)
@@ -365,16 +387,22 @@ func (sr *SensorRuntime) StartSensor() error {
 	return nil
 }
 
-func (sr *SensorRuntime) StopSensor() {
+// StopSensorRuntime stops sensor and rule collectors gracefully.
+// Will drain the queue and will stop the queue worker pool.
+func (sr *SensorRuntime) StopSensorRuntime() {
 	sr.cancelFunc()
 	sr.sensor.Stop()
 }
 
+// StopOnSignal is a helper around StopSensor function to stop
+// the sensor and related listeners on SIGINT or SIGTERM.
+// Utilizes the StopSensor method which will all components
+// gracefully.
 func (sr *SensorRuntime) StopOnSignal() {
 	signalChan := make(chan os.Signal, 1)
 	signal.Notify(signalChan, syscall.SIGINT, syscall.SIGTERM)
 	<-signalChan
 	klog.V(1).Info("Received an interrupt, stopping sensor")
-	sr.StopSensor()
+	sr.StopSensorRuntime()
 	klog.V(1).Info("Sensor stopped")
 }

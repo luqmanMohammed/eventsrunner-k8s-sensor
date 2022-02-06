@@ -49,11 +49,11 @@ var rootCmd = &cobra.Command{
 		klog.InitFlags(nil)
 		flag.Set("v", strconv.Itoa(config.LogVerbosity))
 		defer klog.Flush()
-		sr, err := sensor.SetupSensor(config)
+		sr, err := sensor.SetupNewSensorRuntime(config)
 		if err != nil {
 			panic(err)
 		}
-		go sr.StartSensor()
+		go sr.StartSensorRuntime()
 		sr.StopOnSignal()
 	},
 }
