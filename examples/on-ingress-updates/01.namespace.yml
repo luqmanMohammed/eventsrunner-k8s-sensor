@@ -1,5 +1,5 @@
 ---
-APIVersion: v1
-Kind: Namespace
+apiVersion: v1
+kind: Namespace
 metadata:
   name: events-runner

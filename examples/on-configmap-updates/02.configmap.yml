@@ -1,6 +1,6 @@
 ---
-APIVersion: v1
-Kind: ConfigMap
+apiVersion: v1
+kind: ConfigMap
 metadata:
   name: events-runner
   namespace: events-runner
