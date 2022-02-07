@@ -43,7 +43,8 @@ type EventsRunnerClientOpts struct {
 	JWTToken            string
 }
 
-// EventsRunnerClient will be
+// EventsRunnerClient holds an http.Client and required headers
+// to be used for sending requests to the EventsRunner
 type EventsRunnerClient struct {
 	eventsRunnerBaseURL string
 	httpClient          *http.Client
@@ -76,7 +77,7 @@ func createTLSConfig(caCertPath, clientKeyPath, clientCertPath string) (*tls.Con
 	return tlsConfig, nil
 }
 
-// NewMutualTLSAuthClient creates a new EventsRunnerClient with mutual TLS authentication.
+// newMutualTLSAuthClient creates a new EventsRunnerClient with mutual TLS authentication.
 // Configures the client to use the provided CA cert path, client key path and client cert path.
 // If JWT Token is provided, it will be added in the request Authorization header.
 func newMutualTLSClient(erClientOpts *EventsRunnerClientOpts) (*EventsRunnerClient, error) {
@@ -102,11 +103,13 @@ func newMutualTLSClient(erClientOpts *EventsRunnerClientOpts) (*EventsRunnerClie
 	}, nil
 }
 
-// NewJWTAuthClient creates a new EventsRunnerClient with JWT authentication.
+// newJWTAuthClient creates a new EventsRunnerClient with JWT authentication.
 // Requires the JWT Token to be provided.
 // If the server is HTTPS, CACertPath Option is required, the client will use
 // the provided CA cert for server certificate verification.
-// If all required options for mTLS are provided, client will use them.
+// If all required options are present, set tryMTLS flag to true, client will
+// try to initialize a mutual TLS client with JWT Token in the request Authorization
+// header.
 func newJWTClient(erClientOpts *EventsRunnerClientOpts, tryMTLS bool, httpsEndpoint bool) (*EventsRunnerClient, error) {
 	var tlsConfig *tls.Config
 	if tryMTLS {
@@ -140,6 +143,9 @@ func newJWTClient(erClientOpts *EventsRunnerClientOpts, tryMTLS bool, httpsEndpo
 
 // New creates a new EventsRunnerClient with the provided options.
 // Authentication mode is determined by the authType argument.
+// If EventsRunnerBaseURL is an HTTPS endpoint, CACertPath Option is required even
+// if JWT authentication is used.
+// Check EventsRunnerClientOpts for each authentication methods requirements.
 func New(authType AuthType, erClientOpts *EventsRunnerClientOpts) (*EventsRunnerClient, error) {
 	mTLSRequirementsErr := config.AnyRequestedConfigMissing(map[string]interface{}{
 		"CaCertPath":     erClientOpts.CaCertPath,
@@ -178,9 +184,9 @@ func New(authType AuthType, erClientOpts *EventsRunnerClientOpts) (*EventsRunner
 	return nil, fmt.Errorf("authType %s is not supported", authType)
 }
 
-// ProcessEvent sends an event to the EventsRunner server, and will wait
+// ProcessEvent sends the event to the EventsRunner server, and will wait
 // for a response.
-// Response code 200 (Subject to Change) is only considered a success.
+// Only a Response code 200 (Subject to Change) is considered a success.
 // Requests will be sent to "<base url>/api/v1/events".
 func (er EventsRunnerClient) ProcessEvent(event *eventqueue.Event) error {
 	eventJson, err := json.Marshal(event)

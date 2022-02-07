@@ -20,9 +20,10 @@ var (
 	ErrFileIsNotExecutable = errors.New("file is not executable")
 )
 
-// ScriptExecutor is an implementation of QueueExecutor
-// interface in the eventqueue package.
-// which is used to execute a script.
+// ScriptExecutor is an implementation of QueueExecutor interface in the
+// eventqueue package.
+// Script executor will execute configured scripts according to the event
+// received from the event queue.
 // Scripts should be in the following naming convention
 // <ScriptDir>/<ScriptPrefix>-<RuleID>.sh .
 // Scripts should be executable.
@@ -36,6 +37,7 @@ type ScriptExecutor struct {
 }
 
 // NewScriptExecutor creates a new instance of ScriptExecutor.
+// ScriptDir and ScriptPrefix are configs are required.
 func New(scriptDir, scriptPrefix string) (*ScriptExecutor, error) {
 	if err := config.AnyRequestedConfigMissing(map[string]interface{}{
 		"ScriptDir":    scriptDir,

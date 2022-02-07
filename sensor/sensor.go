@@ -28,6 +28,7 @@ import (
 	"k8s.io/klog/v2"
 )
 
+// SensorState type depicts the state of the sensor.
 type SensorState int
 
 const (
@@ -38,10 +39,10 @@ const (
 )
 
 // ruleInformer holds information related to a rule in runtime
-// along with the informer that is responsible to listen to the
+// along with the informer that is responsible for listening to the
 // events for a specific rule.
-// closing the stopChan channel will stop the informer and the
-// informer will stop listening to the events for the said rule.
+// Closing the stopChan channel will stop the informer which prevents
+// events for the specific rule from being collected.
 type ruleInformer struct {
 	rule              *rules.Rule
 	informerStartTime time.Time
@@ -55,6 +56,9 @@ func (rr *ruleInformer) startInformer() {
 }
 
 // SensorOpts holds options related to sensor configuration
+// - KubConfig : kubernetes config
+// - EventQueueOpts : event queue options. Refer eventqueue.EventQueueOpts
+// - SensorName: name of the sensor
 type SensorOpts struct {
 	eventqueue.EventQueueOpts
 	KubeConfig *rest.Config
@@ -123,7 +127,7 @@ func (s *Sensor) addFuncWrapper(ruleInf *ruleInformer) func(obj interface{}) {
 // MODIFIED event type is not configured for a specific rule.
 // If the resource version of both new and old objects are same, the event
 // wont be processed.
-// Old object is stored as primary at index 0 and new object as secoundry at index 1.
+// Old object is stored as primary at index 0 and new object as secondary at index 1.
 func (s *Sensor) updateFuncWrapper(ruleInf *ruleInformer) func(obj interface{}, newObj interface{}) {
 	for _, t_eventType := range ruleInf.rule.EventTypes {
 		if t_eventType == rules.MODIFIED {
@@ -184,9 +188,12 @@ func (s *Sensor) deleteFuncWrapper(ruleInf *ruleInformer) func(obj interface{}) 
 
 // ReloadRules will reload affected sensor rules without requiring a restart.
 // Thread safe by using mutex.
-// Calculates which of the rules are affected, and reloads them.
-// Added new rules which are not present in the old rules will be added.
+// Finds out which of the rules are affected, and reloads only them.
+// Newly added rules which are not present in the old rules will be added.
 // Rules which are not present in the new rules will be removed.
+// For the rules which were updated, old informer will stopped and a new one
+// will be created with the new rule configuration.
+// If the sensor is not in a Running state, rules will not be reloaded.
 // ReloadRules assumes all rules are valid and are unique.
 func (s *Sensor) ReloadRules(sensorRules map[rules.RuleID]*rules.Rule) {
 	s.lock.Lock()
@@ -221,7 +228,9 @@ func (s *Sensor) ReloadRules(sensorRules map[rules.RuleID]*rules.Rule) {
 
 // registerInformerForRule creates a new informer for the provide rule.
 // Informers filters will be configured according to the rule.
-// TODO: Give more meaningful labelSelector.
+// Label rules with <SensorName>=ignore for the event to be ignored.
+// TODO: Add namespace wide ignore by adding <SensorName>=ignore to the
+// 	     namespace label.
 func (s *Sensor) registerInformerForRule(rule *rules.Rule) *ruleInformer {
 	dynamicInformer := dynamicinformer.NewFilteredDynamicInformer(
 		s.dynamicClientSet,
@@ -272,8 +281,8 @@ func (s *Sensor) registerInformerForRule(rule *rules.Rule) *ruleInformer {
 
 // Start starts the sensor. It will start all informers which will register event handlers
 // and filters based on the rules.
-// Start wont validate rules for uniques.
-// Start is a blocking call.
+// Start assumes rules are valid and unique.
+// Start is a blocking call, it will block until the sensor is stopped.
 func (s *Sensor) Start(sensorRules map[rules.RuleID]*rules.Rule) {
 	klog.V(1).Info("Starting sensor")
 	s.state = STARTING
@@ -287,16 +296,16 @@ func (s *Sensor) Start(sensorRules map[rules.RuleID]*rules.Rule) {
 }
 
 // StartSensorAndWorkerPool will start the sensor and the worker pool.
-// Worker pool which is part of the eventqueue module will consume events from teh queue.
+// Worker pool which is part of the eventqueue module will consume events from the queue.
 func (s *Sensor) StartSensorAndWorkerPool(sensorRules map[rules.RuleID]*rules.Rule) {
 	go s.Start(sensorRules)
 	go s.Queue.StartQueueWorkerPool()
 	<-s.stopChan
 }
 
-// Stop stops the sensor. It will stop all informers and unregister event handlers.
+// Stop stops the sensor. It will stop all informers which will unregister all 
+// event handlers.
 // Stop will block until all informers are stopped.
-// Stop will release Start call.
 func (s *Sensor) Stop() {
 	s.state = STOPPING
 	klog.V(1).Info("Stopping sensor")
@@ -321,7 +330,7 @@ func (sr *SensorRuntime) GetSensorState() SensorState {
 }
 
 // SetupSensorRuntime will setup the sensor and return a sensor runtime.
-// SetupSensor will collect KubeConfig and initialize the sensor
+// SetupSensor will collect the required KubeConfig and initialize the sensor
 // to be able to start.
 func SetupNewSensorRuntime(sensorConfig *config.Config) (*SensorRuntime, error) {
 	kubeConfig, err := utils.GetKubeAPIConfig(sensorConfig.KubeConfigPath)
@@ -368,10 +377,10 @@ func SetupNewSensorRuntime(sensorConfig *config.Config) (*SensorRuntime, error) 
 	}, nil
 }
 
-// StartSensorRuntime will start the sensor and rule collectors for
-// auto reload of rules on rule change.
+// StartSensorRuntime will start the sensor and rule collectors.
+// Rules will be automatically reloaded if any rules changes were detected.
 // StartSensor will collect initial rules for the sensor.
-// StartSensor will block until the sensor is stopped using
+// StartSensor will block until the sensor runtime is stopped using
 // StopSensor method.
 func (sr *SensorRuntime) StartSensorRuntime() error {
 	ctx, cancelFunc := context.WithCancel(context.Background())
@@ -395,15 +404,16 @@ func (sr *SensorRuntime) StartSensorRuntime() error {
 }
 
 // StopSensorRuntime stops sensor and rule collectors gracefully.
-// Will drain the queue and will stop the queue worker pool.
+// StopSensor will drain the Queue to make sure collected events
+// are processed and then it will stop the workers.
 func (sr *SensorRuntime) StopSensorRuntime() {
 	sr.cancelFunc()
 	sr.sensor.Stop()
 }
 
-// StopOnSignal is a helper around StopSensor function to stop
-// the sensor and related listeners on SIGINT or SIGTERM.
-// Utilizes the StopSensor method which will all components
+// StopOnSignal is a helper around StopSensor method to stop
+// the sensor and related listeners on SIGINT or SIGTERM signals.
+// Utilizes the StopSensor method which will stop all components
 // gracefully.
 func (sr *SensorRuntime) StopOnSignal() {
 	signalChan := make(chan os.Signal, 1)

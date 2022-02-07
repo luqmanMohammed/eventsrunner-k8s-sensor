@@ -16,10 +16,19 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// SensorReloadInterface should be implemented by sensors which should
-// support sensor reload based on rule change.
+// SensorReloadInterface should be implemented by sensors which needs to
+// support automatic reloading of rules.
 type SensorReloadInterface interface {
 	ReloadRules(sensorRules map[rules.RuleID]*rules.Rule)
+}
+
+// ConfigMapRuleCollector is used to collect rules from a kubernetes configmaps.
+// Rules will be collect from the configmaps in the sensor namespace with the
+// label provided via the sensorRuleConfigMapLabel field.
+type ConfigMapRuleCollector struct {
+	clientSet                *kubernetes.Clientset
+	sensorNamespace          string
+	sensorRuleConfigMapLabel string
 }
 
 // NewConfigMapRuleCollector returns a new ConfigMapRuleCollector.
@@ -31,17 +40,7 @@ func NewConfigMapRuleCollector(clientSet *kubernetes.Clientset, sensorNamespace 
 	}
 }
 
-// ConfigMapRuleCollector is used to collect rules from a kubernetes configmap
-// Rules will be collect from the configmaps with the label er-sensor-rules in
-// the sensor namespace.
-// Implements RuleCollector Interface
-type ConfigMapRuleCollector struct {
-	clientSet                *kubernetes.Clientset
-	sensorNamespace          string
-	sensorRuleConfigMapLabel string
-}
-
-// GetRules will return all rules from the configmaps in the sensor namespace
+// Collect will return all rules from the configmaps in the sensor namespace
 // with the label configured via sensorRuleConfigMapLabel.
 // Only one copy of the duplicate rules will be returned.
 // If the configmap does not exist or the rules are invalid, an empty map will
@@ -64,8 +63,8 @@ func (cmrc ConfigMapRuleCollector) Collect(ctx context.Context) (map[rules.RuleI
 
 // parseCollectedConfigMapsIntoRules parses provided list of configmaps into
 // a map of rules.
-// Data field of configmap should contain key rules, which should contain a json
-// list of valid rules (Refer Rule struct doc for further information).
+// Data field of configmap should contain key `rules`, which should contain a json
+// list of valid rules (Refer rules.Rule struct doc for further information).
 // Each rule should contain a valid rule ID, else rule wont be processed.
 // If any errors are found during json decoding, error will be logged and the
 // function will continue executing.

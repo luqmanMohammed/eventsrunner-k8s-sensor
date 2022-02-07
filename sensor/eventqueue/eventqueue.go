@@ -11,6 +11,7 @@ import (
 )
 
 // Event struct holds all information related to an event.
+// TODO: Add json tags to the struct.
 type Event struct {
 	EventType rules.EventType
 	RuleID    rules.RuleID
@@ -18,12 +19,13 @@ type Event struct {
 	tries     int `json:"-"`
 }
 
-// QueueItemExecutor all queue executors must implement this interface
+// QueueItemExecutor all queue executors must implement this interface.
+// Execute method will be called for each item in the queue.
 type QueueExecutor interface {
 	Execute(event *Event) error
 }
 
-// MockQueueExecutor is a mock implementation of QueueExecutor.
+// MockQueueExecutor is a mock implementation of QueueExecutor interface.
 // It is used for testing or as a placeholder.
 type MockQueueExecutor struct{}
 
@@ -42,6 +44,10 @@ type EventQueue struct {
 	executor     QueueExecutor
 }
 
+// EventQueueOpts holds the configuration options for the EventQueue.
+// WorkerCount is the number of workers to start.
+// MaxTryCount is the maximum number of times an item will be retried.
+// RequeueDelay is the delay in seconds before an item is retried.
 type EventQueueOpts struct {
 	WorkerCount  int
 	MaxTryCount  int
@@ -76,10 +82,11 @@ func (eq *EventQueue) StartQueueWorkerPool() {
 
 // processItem will process the item from the queue.
 // Execute method will be called for each item in the queue.
-// If the Execute method returns an error, the item will be added to the queue
-// to be retried, if the number of reties exceed the configured
-// value, the item wont be retried again.
-// If the Execute method returns nil, the item will be removed from the queue.
+// If the Execute method returns an error, the item will be added back into the
+// queue after the configured delay.
+// Event will be retried up to the configured maxTryCount, then it will removed from the
+// the queue.
+// If the Execute method returns nil for the error, the item will be removed from the queue.
 func (eq *EventQueue) processItem(event *Event) {
 	event.tries++
 	klog.V(2).Infof("Processing event from rule %s, tries: %d", event.RuleID, event.tries)

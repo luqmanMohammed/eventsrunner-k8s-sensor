@@ -19,7 +19,7 @@ type Filter struct {
 	FieldFilter string `default:"" json:"fieldFilter"`
 }
 
-// RuleID unique identifier for a rule
+// RuleID represents an unique identifier for a rule
 type RuleID string
 
 // Rule struct is used to represent a rule that will be used to filter events

@@ -20,6 +20,7 @@ var (
 
 // NormalizeAndValidateRule validates and normalizes a rule.
 // Normalized by making all event types lowercase and removing duplicates.
+// Normalized by making all updateOn values lowercase and removing duplicates.
 func NormalizeAndValidateRule(rule *rules.Rule) error {
 	if rule.ID == "" {
 		return ErrRuleIDNotFound

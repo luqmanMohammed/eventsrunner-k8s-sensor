@@ -42,12 +42,12 @@ func StringInSlice(a string, list []string) bool {
 	return false
 }
 
-// Check if provided value is its zero value
+// IsZero checks if the provided value is its zero value
 func IsZero(value interface{}) bool {
 	return value == nil || reflect.DeepEqual(value, reflect.Zero(reflect.TypeOf(value)).Interface())
 }
 
-// Find 1st zero value in map of values and return its key else return empty string
+// FindZeroValue finds the 1st zero value in the map.
 func FindZeroValue(values map[string]interface{}) string {
 	for k, v := range values {
 		if IsZero(v) {

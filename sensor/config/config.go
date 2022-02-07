@@ -11,8 +11,8 @@ import (
 )
 
 var (
-	// DefaultConfig is the contains all the default configs for a sensor.
-	// This config needs to be overridden by the config file or environment variables.
+	// DefaultConfig all author said defaults for the sensor.
+	// This config can be overwritten by a config file or environment variables.
 	// This config uses the log executor which will only log Rules.ID of the event.
 	DefaultConfig = map[string]interface{}{
 		// Sensor Config
@@ -43,9 +43,7 @@ var (
 	}
 )
 
-// Config struct contains all the configs for a sensor.
-// This struct will be used to Unmarshal the configs from the config file or
-// environment variables using Viper.
+// Config will be used to unmarshal the collected configs into a standardized struct.
 type Config struct {
 	// Sensor Config
 	LogVerbosity   int
@@ -81,10 +79,10 @@ type Config struct {
 // 1. Default variables
 // 2. Environment variables
 // 3. Config file
-// Environment variables should start with the prefix ER_K8S_SENSOR_ to be collected
-// Config file should be in yaml format
+// Environment variables should start with the prefix ER_K8S_SENSOR_ to be collected.
+// Config file should be in the yaml format.
 // Config files will be collected in the following locations in the following order
-// unless if config file path is not provided part of parameters
+// unless if config file path is provided part of sensor command line arguments.
 // 1. /etc/er-k8s-sensor/config.yaml
 // 2. $HOME/.er-k8s-sensor/config.yaml
 func ParseConfigFromViper(cfgPath string, verbosity int) (*Config, error) {
@@ -92,10 +90,8 @@ func ParseConfigFromViper(cfgPath string, verbosity int) (*Config, error) {
 		viper.SetDefault(key, value)
 	}
 	if cfgPath != "" {
-		// Use config file from the flag.
 		viper.SetConfigFile(cfgPath)
 	} else {
-		// Find home directory.
 		home, err := os.UserHomeDir()
 		if err != nil {
 			klog.V(1).ErrorS(err, "failed to get user home directory. File based config wont be taken")
@@ -124,8 +120,8 @@ func ParseConfigFromViper(cfgPath string, verbosity int) (*Config, error) {
 	return config, nil
 }
 
-// RequiredFieldMissingError custom error is returned when required field is missing.
-// Missing field is present as part of the error struct
+// RequiredConfigMissingError custom error is returned when a required field is missing.
+// Missing config name will be returned as part of the error struct.
 type RequiredConfigMissingError struct {
 	ConfigName string
 }
@@ -136,8 +132,8 @@ func (rf *RequiredConfigMissingError) Error() string {
 }
 
 // AnyRequestedConfigMissing is an helper function which will check if any of the
-// configs provided in the config map are missing.
-// If the value is the zero of the type then its considered as missing.
+// configs, provided in the map of configs are missing.
+// If the value is the zero value of the type then its considered as missing.
 func AnyRequestedConfigMissing(configs map[string]interface{}) error {
 	missingConfig := utils.FindZeroValue(configs)
 	if missingConfig != "" {

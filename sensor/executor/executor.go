@@ -22,12 +22,16 @@ const (
 	LOG    ExecutorType = "log"
 )
 
-// ExecutorType is the type of the executor.
 type ExecutorType string
 
 // ExecutorOpts contains options for creating any type of executor.
-// New method will error out if required config is not provided for
-// the specific executor
+// New method will error out if a required config is not provided for
+// the specific executor.
+// - ScriptDir: Directory where the scripts are located.
+// - ScriptPrefix: Prefix of the scripts.
+// - AuthType: Type of authentication to be used for eventsrunner client auth.
+// - EventsRunnerClientOpts: Options for creating eventsrunner client. Refer to
+// the eventsrunner client package for more details.
 type ExecutorOpts struct {
 	ScriptDir    string
 	ScriptPrefix string
@@ -41,7 +45,7 @@ type ExecutorOpts struct {
 // - script
 // - eventsrunner
 // - log
-// If the required config is not provided for the specific executor,
+// If the a required config is not provided for the specific executor,
 // New method will error out.
 func New(exType ExecutorType, exOpts ExecutorOpts) (Executor, error) {
 	switch exType {
