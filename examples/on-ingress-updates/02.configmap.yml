@@ -14,5 +14,5 @@ data:
     "version": "v1",
     "resource": "ingresses",
     "namespaces": ["default"],
-    "eventTypes": ["ADDED", "MODIFIED"],
+    "eventTypes": ["ADDED", "MODIFIED"]
     }]
