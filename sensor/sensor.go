@@ -52,6 +52,7 @@ type ruleInformer struct {
 
 // startInformer starts the informer for a specific rule.
 func (rr *ruleInformer) startInformer() {
+	klog.V(2).Infof("Starting informer for rule %v", rr.rule.ID)
 	go rr.informer.Informer().Run(rr.stopChan)
 }
 
@@ -107,8 +108,10 @@ func (s *Sensor) addFuncWrapper(ruleInf *ruleInformer) func(obj interface{}) {
 			return func(obj interface{}) {
 				unstructuredObj := obj.(*unstructured.Unstructured)
 				if !unstructuredObj.GetCreationTimestamp().After(ruleInf.informerStartTime) {
+					klog.V(4).Infof("Object %v was created before the start of the rule %v", unstructuredObj.GetName(), ruleInf.rule.ID)
 					return
 				}
+				klog.V(4).Infof("Adding object %v:%v to the event queue for the ADDED event", unstructuredObj.GetNamespace(), unstructuredObj.GetName())
 				s.Queue.Add(&eventqueue.Event{
 					EventType: rules.ADDED,
 					RuleID:    ruleInf.rule.ID,
@@ -117,7 +120,7 @@ func (s *Sensor) addFuncWrapper(ruleInf *ruleInformer) func(obj interface{}) {
 			}
 		}
 	}
-	klog.V(4).Infof("ADDED event type is not configured for rule %v", ruleInf.rule.ID)
+	klog.V(2).Infof("ADDED event type is not configured for rule %v", ruleInf.rule.ID)
 	return nil
 }
 
@@ -137,10 +140,12 @@ func (s *Sensor) updateFuncWrapper(ruleInf *ruleInformer) func(obj interface{}, 
 				unstructuredNewObj := newObj.(*unstructured.Unstructured)
 
 				if unstructuredNewObj.GetResourceVersion() == unstructuredObj.GetResourceVersion() {
+					klog.V(4).Infof("Actual update for object %s:%s was not detected", unstructuredObj.GetNamespace(), unstructuredObj.GetName())
 					return
 				}
 
 				if len(ruleInf.rule.UpdatesOn) > 0 {
+					klog.V(4).Infof("Event on object %s:%s is subjected to updates on filter", unstructuredObj.GetNamespace(), unstructuredObj.GetName())
 					enqueue := false
 					for _, updateOn := range ruleInf.rule.UpdatesOn {
 						updateOnStr := string(updateOn)
@@ -150,10 +155,12 @@ func (s *Sensor) updateFuncWrapper(ruleInf *ruleInformer) func(obj interface{}, 
 						}
 					}
 					if !enqueue {
+						klog.V(4).Infof("Event on object %s:%s will not be processed since configured subset was not updated", unstructuredObj.GetNamespace(), unstructuredObj.GetName())
 						return
 					}
 				}
 
+				klog.V(4).Infof("Adding object %v:%v to the event queue for the MODIFIED event", unstructuredObj.GetNamespace(), unstructuredObj.GetName())
 				s.Queue.Add(&eventqueue.Event{
 					EventType: rules.MODIFIED,
 					RuleID:    ruleInf.rule.ID,
@@ -162,7 +169,7 @@ func (s *Sensor) updateFuncWrapper(ruleInf *ruleInformer) func(obj interface{}, 
 			}
 		}
 	}
-	klog.V(4).Infof("MODIFIED event type is not configured for rule %v", ruleInf.rule.ID)
+	klog.V(2).Infof("MODIFIED event type is not configured for rule %v", ruleInf.rule.ID)
 	return nil
 }
 
@@ -174,15 +181,17 @@ func (s *Sensor) deleteFuncWrapper(ruleInf *ruleInformer) func(obj interface{}) 
 	for _, t_eventType := range ruleInf.rule.EventTypes {
 		if t_eventType == rules.DELETED {
 			return func(obj interface{}) {
+				unstructuredObj := obj.(*unstructured.Unstructured)
+				klog.V(4).Infof("Adding object %v:%v to the event queue for the DELETED event", unstructuredObj.GetNamespace(), unstructuredObj.GetName())
 				s.Queue.Add(&eventqueue.Event{
 					EventType: rules.DELETED,
 					RuleID:    ruleInf.rule.ID,
-					Objects:   []*unstructured.Unstructured{obj.(*unstructured.Unstructured)},
+					Objects:   []*unstructured.Unstructured{unstructuredObj},
 				})
 			}
 		}
 	}
-	klog.V(4).Infof("DELETED event type is not configured for rule %v", ruleInf.rule.ID)
+	klog.V(2).Infof("DELETED event type is not configured for rule %v", ruleInf.rule.ID)
 	return nil
 }
 
@@ -198,17 +207,20 @@ func (s *Sensor) deleteFuncWrapper(ruleInf *ruleInformer) func(obj interface{}) 
 func (s *Sensor) ReloadRules(sensorRules map[rules.RuleID]*rules.Rule) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
+	klog.V(1).Infof("Reloading rules for sensor %v", s.SensorName)
 	if s.state != RUNNING {
 		klog.V(1).Info("Sensor is not running, skipping reloading rules")
 		return
 	}
 	for newRuleId, newRule := range sensorRules {
 		if oldRuleInformer, ok := s.ruleInformers[newRuleId]; !ok {
+			klog.V(2).Infof("Rule %v is not present in the old rules, adding it", newRuleId)
 			ruleInf := s.registerInformerForRule(newRule)
 			s.ruleInformers[newRuleId] = ruleInf
 			ruleInf.startInformer()
 		} else {
 			if !reflect.DeepEqual(oldRuleInformer.rule, newRule) {
+				klog.V(2).Infof("Rule %v is present in the old rules, but the configuration is different, updating it", newRuleId)
 				close(oldRuleInformer.stopChan)
 				ruleInf := s.registerInformerForRule(newRule)
 				s.ruleInformers[newRuleId] = ruleInf
@@ -220,6 +232,7 @@ func (s *Sensor) ReloadRules(sensorRules map[rules.RuleID]*rules.Rule) {
 	}
 	for oldRuleId, oldRuleInformer := range s.ruleInformers {
 		if _, ok := sensorRules[oldRuleId]; !ok {
+			klog.V(2).Infof("Rule %v is not present in the new rules, removing it", oldRuleId)
 			close(oldRuleInformer.stopChan)
 			delete(s.ruleInformers, oldRuleId)
 		}
@@ -247,7 +260,7 @@ func (s *Sensor) registerInformerForRule(rule *rules.Rule) *ruleInformer {
 			options.FieldSelector = rule.FieldFilter
 		}))
 
-	klog.V(3).Infof("Registering event handler for rule %v", rule.ID)
+	klog.V(1).Infof("Registering event handler for rule %v", rule.ID)
 
 	ruleStopChan := make(chan struct{})
 	ruleInformer := &ruleInformer{
@@ -259,12 +272,13 @@ func (s *Sensor) registerInformerForRule(rule *rules.Rule) *ruleInformer {
 
 	dynamicInformer.Informer().AddEventHandler(cache.FilteringResourceEventHandler{
 		FilterFunc: func(obj interface{}) bool {
-			klog.V(5).Infof("FilterFunc called for rule %v with object %v", rule.ID, obj)
 			meta, ok := obj.(metav1.Object)
+			klog.V(4).Infof("FilterFunc called for rule %v with object %v:%v", rule.ID, meta.GetNamespace(), meta.GetName())
 			if !ok {
 				return false
 			}
 			if len(rule.Namespaces) != 0 && !utils.StringInSlice(meta.GetNamespace(), rule.Namespaces) {
+				klog.V(4).Infof("FilterFunc: Namespace %v is not in the list of namespaces %v for object %v:%v", meta.GetNamespace(), rule.Namespaces, meta.GetNamespace(), meta.GetName())
 				return false
 			}
 			return true
@@ -303,7 +317,7 @@ func (s *Sensor) StartSensorAndWorkerPool(sensorRules map[rules.RuleID]*rules.Ru
 	<-s.stopChan
 }
 
-// Stop stops the sensor. It will stop all informers which will unregister all 
+// Stop stops the sensor. It will stop all informers which will unregister all
 // event handlers.
 // Stop will block until all informers are stopped.
 func (s *Sensor) Stop() {
@@ -313,6 +327,7 @@ func (s *Sensor) Stop() {
 		close(ruleInf.stopChan)
 	}
 	close(s.stopChan)
+	klog.V(1).Info("Stopped all informers, draining queue")
 	s.Queue.ShutDownWithDrain()
 	s.state = STOPPED
 }
@@ -326,6 +341,7 @@ type SensorRuntime struct {
 }
 
 func (sr *SensorRuntime) GetSensorState() SensorState {
+	klog.V(3).Infof("Current sensor state: %v", sr.sensor.state)
 	return sr.sensor.state
 }
 
@@ -335,10 +351,12 @@ func (sr *SensorRuntime) GetSensorState() SensorState {
 func SetupNewSensorRuntime(sensorConfig *config.Config) (*SensorRuntime, error) {
 	kubeConfig, err := utils.GetKubeAPIConfig(sensorConfig.KubeConfigPath)
 	if err != nil {
+		klog.V(2).ErrorS(err, "Error when try to create kube config")
 		return nil, err
 	}
 	kubeClient, err := kubernetes.NewForConfig(kubeConfig)
 	if err != nil {
+		klog.V(2).ErrorS(err, "Error when try to create kube client")
 		return nil, err
 	}
 	ruleCollector := collector.NewConfigMapRuleCollector(kubeClient, sensorConfig.SensorNamespace, sensorConfig.SensorRuleConfigMapLabel)
@@ -359,6 +377,7 @@ func SetupNewSensorRuntime(sensorConfig *config.Config) (*SensorRuntime, error) 
 		},
 	)
 	if err != nil {
+		klog.V(2).ErrorS(err, "Error when try to create executor")
 		return nil, err
 	}
 	sensor := New(&SensorOpts{
@@ -387,6 +406,7 @@ func (sr *SensorRuntime) StartSensorRuntime() error {
 	sr.cancelFunc = cancelFunc
 	sensorRules, err := sr.ruleCollector.Collect(ctx)
 	if err != nil {
+		klog.V(2).ErrorS(err, "Error when try to collect rules")
 		return err
 	}
 	wg := sync.WaitGroup{}
@@ -416,6 +436,7 @@ func (sr *SensorRuntime) StopSensorRuntime() {
 // Utilizes the StopSensor method which will stop all components
 // gracefully.
 func (sr *SensorRuntime) StopOnSignal() {
+	klog.V(1).Info("Listening for SIGINT/SIGTERM")
 	signalChan := make(chan os.Signal, 1)
 	signal.Notify(signalChan, syscall.SIGINT, syscall.SIGTERM)
 	<-signalChan

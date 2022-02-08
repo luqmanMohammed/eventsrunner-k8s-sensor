@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/luqmanMohammed/eventsrunner-k8s-sensor/sensor/rules"
+	"k8s.io/klog/v2"
 )
 
 var (
@@ -22,6 +23,7 @@ var (
 // Normalized by making all event types lowercase and removing duplicates.
 // Normalized by making all updateOn values lowercase and removing duplicates.
 func NormalizeAndValidateRule(rule *rules.Rule) error {
+	klog.V(3).Infof("Validating rule: %s", rule.ID)
 	if rule.ID == "" {
 		return ErrRuleIDNotFound
 	}

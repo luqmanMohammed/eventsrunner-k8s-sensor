@@ -51,6 +51,7 @@ var rootCmd = &cobra.Command{
 		defer klog.Flush()
 		sr, err := sensor.SetupNewSensorRuntime(config)
 		if err != nil {
+			klog.V(1).ErrorS(err, "Failed to setup sensor runtime")
 			panic(err)
 		}
 		go sr.StartSensorRuntime()

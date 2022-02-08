@@ -86,10 +86,12 @@ type Config struct {
 // 1. /etc/er-k8s-sensor/config.yaml
 // 2. $HOME/.er-k8s-sensor/config.yaml
 func ParseConfigFromViper(cfgPath string, verbosity int) (*Config, error) {
+	klog.V(1).Infof("Collecting and parsing config from viper")
 	for key, value := range DefaultConfig {
 		viper.SetDefault(key, value)
 	}
 	if cfgPath != "" {
+		klog.V(2).Infof("Collecting config from provided config file path: %s", cfgPath)
 		viper.SetConfigFile(cfgPath)
 	} else {
 		home, err := os.UserHomeDir()
@@ -101,6 +103,7 @@ func ParseConfigFromViper(cfgPath string, verbosity int) (*Config, error) {
 		viper.SetConfigType("yaml")
 		viper.SetConfigName("config")
 	}
+	klog.V(3).Info("Only environment variables starting with ER_K8S_SENSOR_ will be collected")
 	viper.AllowEmptyEnv(false)
 	viper.SetEnvPrefix("ER_K8S_SENSOR")
 	viper.AutomaticEnv()
@@ -115,6 +118,7 @@ func ParseConfigFromViper(cfgPath string, verbosity int) (*Config, error) {
 	var config *Config
 	err := viper.Unmarshal(&config)
 	if err != nil {
+		klog.V(1).ErrorS(err, "failed to unmarshal config")
 		return nil, err
 	}
 	return config, nil
