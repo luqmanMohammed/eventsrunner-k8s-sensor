@@ -686,8 +686,8 @@ fi
 
 # Try to base64 decode EVENT variable
 EVENT_DECODED=$(echo "$EVENT" | base64 -d)
-EVENT_DECODED_RULE_ID=$(echo "$EVENT_DECODED" | jq -r '.RuleID')
-EVENT_TYPE=$(echo "$EVENT_DECODED" | jq -r '.EventType')
+EVENT_DECODED_RULE_ID=$(echo "$EVENT_DECODED" | jq -r '.ruleID')
+EVENT_TYPE=$(echo "$EVENT_DECODED" | jq -r '.eventType')
 # Check if EVENT_DECODED_RULE_ID is cm-rule-1
 if [ "$EVENT_DECODED_RULE_ID" != "cm-rule-1" ]; then
 	echo "Rule ID is not cm-rule-1"
