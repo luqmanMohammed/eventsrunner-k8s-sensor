@@ -13,10 +13,10 @@ import (
 // Event struct holds all information related to an event.
 // TODO: Add json tags to the struct.
 type Event struct {
-	EventType rules.EventType
-	RuleID    rules.RuleID
-	Objects   []*unstructured.Unstructured
-	tries     int `json:"-"`
+	EventType rules.EventType              `json:"eventType"`
+	RuleID    rules.RuleID                 `json:"ruleID"`
+	Objects   []*unstructured.Unstructured `json:"objects"`
+	tries     int                          `json:"-"`
 }
 
 // QueueItemExecutor all queue executors must implement this interface.
