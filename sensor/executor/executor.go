@@ -48,6 +48,7 @@ type ExecutorOpts struct {
 // If the a required config is not provided for the specific executor,
 // New method will error out.
 func New(exType ExecutorType, exOpts ExecutorOpts) (Executor, error) {
+	klog.V(1).Infof("Creating new executor of type: %s", exType)
 	switch exType {
 	case SCRIPT:
 		return script.New(exOpts.ScriptDir, exOpts.ScriptPrefix)

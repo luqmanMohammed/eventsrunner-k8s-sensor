@@ -72,12 +72,15 @@ func New(executor QueueExecutor, queueOpts EventQueueOpts) *EventQueue {
 // workerCount parameter.
 // Closing the queue will cause the queue to be drained and all workers to exit.
 func (eq *EventQueue) StartQueueWorkerPool() {
+	klog.V(2).Info("Starting queue worker pool")
+	klog.V(2).Infof("Number of workers: %d", eq.workerCount)
 	wg := sync.WaitGroup{}
 	wg.Add(eq.workerCount)
 	for i := 0; i < eq.workerCount; i++ {
 		go eq.startWorker(&wg)
 	}
 	wg.Wait()
+	klog.V(2).Info("All queue workers have successfully stopped")
 }
 
 // processItem will process the item from the queue.
@@ -89,12 +92,12 @@ func (eq *EventQueue) StartQueueWorkerPool() {
 // If the Execute method returns nil for the error, the item will be removed from the queue.
 func (eq *EventQueue) processItem(event *Event) {
 	event.tries++
-	klog.V(2).Infof("Processing event from rule %s, tries: %d", event.RuleID, event.tries)
+	klog.V(3).Infof("Processing event from rule %s, tries: %d", event.RuleID, event.tries)
 	err := eq.executor.Execute(event)
 	if err != nil {
 		klog.V(2).ErrorS(err, "Error during execution of event")
 		if event.tries < eq.maxTryCount {
-			klog.V(2).Info("Adding event to queue to be retried")
+			klog.V(3).Info("Adding event to queue to be retried")
 			eq.DelayingInterface.AddAfter(event, eq.requeueDelay)
 		}
 	}
@@ -105,6 +108,7 @@ func (eq *EventQueue) processItem(event *Event) {
 // queue is closed, which will cause the worker to exit.
 // If the item in the queue is not an Event, it will be ignored.
 func (eq *EventQueue) startWorker(wg *sync.WaitGroup) {
+	klog.V(3).Info("Starting worker")
 	for {
 		item, quit := eq.DelayingInterface.Get()
 		if quit {
@@ -116,5 +120,6 @@ func (eq *EventQueue) startWorker(wg *sync.WaitGroup) {
 		}
 		eq.DelayingInterface.Done(item)
 	}
+	klog.V(3).Info("Worker has successfully stopped")
 	wg.Done()
 }

@@ -56,20 +56,26 @@ type EventsRunnerClient struct {
 // If Client parameters are empty, only CA will be used to create the TLS
 // config, which is usefull for HTTPS JWT Authentication
 func createTLSConfig(caCertPath, clientKeyPath, clientCertPath string) (*tls.Config, error) {
+	klog.V(2).Infof("Reading CA cert from %s", caCertPath)
 	caCert, err := ioutil.ReadFile(caCertPath)
 	if err != nil {
+		klog.V(2).ErrorS(err, "Failed to read CA cert")
 		return nil, err
 	}
 	caCertPool := x509.NewCertPool()
 	if ok := caCertPool.AppendCertsFromPEM(caCert); !ok {
+		klog.V(2).ErrorS(fmt.Errorf("failed to append CA cert"), "Failed to create CA cert pool")
 		return nil, errors.New("failed to setup tls config")
 	}
 	tlsConfig := &tls.Config{
 		RootCAs: caCertPool,
 	}
 	if clientCertPath != "" && clientKeyPath != "" {
+		klog.V(2).Infof("Reading client cert from %s", clientCertPath)
+		klog.V(2).Infof("Reading client key from %s", clientKeyPath)
 		clientCert, err := tls.LoadX509KeyPair(clientCertPath, clientKeyPath)
 		if err != nil {
+			klog.V(2).ErrorS(err, "Failed to create client tls config")
 			return nil, err
 		}
 		tlsConfig.Certificates = []tls.Certificate{clientCert}
@@ -93,6 +99,7 @@ func newMutualTLSClient(erClientOpts *EventsRunnerClientOpts) (*EventsRunnerClie
 	}
 	headers := make(map[string]string)
 	if erClientOpts.JWTToken != "" {
+		klog.V(2).Infof("Adding JWT token to request Authorization header since its provided")
 		headers["Authorization"] = "Bearer " + erClientOpts.JWTToken
 	}
 	headers["Content-Type"] = "application/json"
@@ -113,12 +120,14 @@ func newMutualTLSClient(erClientOpts *EventsRunnerClientOpts) (*EventsRunnerClie
 func newJWTClient(erClientOpts *EventsRunnerClientOpts, tryMTLS bool, httpsEndpoint bool) (*EventsRunnerClient, error) {
 	var tlsConfig *tls.Config
 	if tryMTLS {
+		klog.V(2).Infof("Trying to initialize a mutual TLS client")
 		var err error
 		tlsConfig, err = createTLSConfig(erClientOpts.CaCertPath, erClientOpts.ClientKeyPath, erClientOpts.ClientCertPath)
 		if err != nil {
 			klog.V(2).Infof("TLS config was provided but failed to create: %v", err)
 		}
 	} else if httpsEndpoint {
+		klog.V(2).Info("Endpoint identified to be HTTPS, CA cert path is required")
 		var err error
 		tlsConfig, err = createTLSConfig(erClientOpts.CaCertPath, "", "")
 		if err != nil {
@@ -155,6 +164,7 @@ func New(authType AuthType, erClientOpts *EventsRunnerClientOpts) (*EventsRunner
 	if authType == "" {
 		return nil, &config.RequiredConfigMissingError{ConfigName: "authType"}
 	}
+	klog.V(2).Infof("checking requirements for EventsRunner Client with authType: %s", authType)
 	if basicRequirementErr := config.AnyRequestedConfigMissing(map[string]interface{}{
 		"EventsRunnerBaseURL": erClientOpts.EventsRunnerBaseURL,
 	}); basicRequirementErr != nil {
@@ -189,23 +199,30 @@ func New(authType AuthType, erClientOpts *EventsRunnerClientOpts) (*EventsRunner
 // Only a Response code 200 (Subject to Change) is considered a success.
 // Requests will be sent to "<base url>/api/v1/events".
 func (er EventsRunnerClient) ProcessEvent(event *eventqueue.Event) error {
+	klog.V(3).Infof("Processing event with rule ID: %s", event.RuleID)
 	eventJson, err := json.Marshal(event)
 	if err != nil {
+		klog.V(3).ErrorS(err, "Failed to marshal event")
 		return err
 	}
 	requestURI := fmt.Sprintf("%s/api/v1/events", er.eventsRunnerBaseURL)
 	req, err := http.NewRequest("POST", requestURI, bytes.NewBuffer(eventJson))
 	if err != nil {
+		klog.V(3).ErrorS(err, "Failed to create request")
 		return err
 	}
 	for k, v := range er.headers {
 		req.Header.Set(k, v)
 	}
+	klog.V(3).Infof("Sending request to %s for event with rule ID", requestURI, event.RuleID)
 	resp, err := er.httpClient.Do(req)
 	if err != nil {
+		klog.V(3).ErrorS(err, "Failed to send request")
 		return err
 	}
+	klog.V(3).Infof("Got response of %s for event with rule ID: %s", event.RuleID, resp.Status)
 	if resp.StatusCode != 200 {
+		klog.V(3).ErrorS(fmt.Errorf("failed due to response code %d", resp.StatusCode), "Failed to process event")
 		return fmt.Errorf("failed to process event. Got status %d", resp.StatusCode)
 	}
 	return nil
