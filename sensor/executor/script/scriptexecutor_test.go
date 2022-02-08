@@ -36,7 +36,7 @@ fi
 
 # Try to base64 decode EVENT variable
 EVENT_DECODED=$(echo "$EVENT" | base64 -d)
-EVENT_DECODED_RULE_ID=$(echo "$EVENT_DECODED" | jq -r '.RuleID')
+EVENT_DECODED_RULE_ID=$(echo "$EVENT_DECODED" | jq -r '.ruleID')
 # Check if EVENT_DECODED_RULE_ID is test-rule
 if [ "$EVENT_DECODED_RULE_ID" != "test-rule" ]; then
 	echo "Rule ID is not test-rule"
