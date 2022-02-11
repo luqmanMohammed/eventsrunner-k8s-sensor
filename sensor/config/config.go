@@ -96,7 +96,7 @@ func ParseConfigFromViper(cfgPath string, verbosity int) (*Config, error) {
 	} else {
 		home, err := os.UserHomeDir()
 		if err != nil {
-			klog.V(1).ErrorS(err, "failed to get user home directory. File based config wont be taken")
+			klog.V(1).ErrorS(err, "failed to get user home directory")
 		}
 		viper.AddConfigPath("/etc/er-k8s-sensor")
 		viper.AddConfigPath(home + "/.er-k8s-sensor")

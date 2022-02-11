@@ -1,0 +1,1434 @@
+
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+		<title>config: Go Coverage Report</title>
+		<style>
+			body {
+				background: black;
+				color: rgb(80, 80, 80);
+			}
+			body, pre, #legend span {
+				font-family: Menlo, monospace;
+				font-weight: bold;
+			}
+			#topbar {
+				background: black;
+				position: fixed;
+				top: 0; left: 0; right: 0;
+				height: 42px;
+				border-bottom: 1px solid rgb(80, 80, 80);
+			}
+			#content {
+				margin-top: 50px;
+			}
+			#nav, #legend {
+				float: left;
+				margin-left: 10px;
+			}
+			#legend {
+				margin-top: 12px;
+			}
+			#nav {
+				margin-top: 10px;
+			}
+			#legend span {
+				margin: 0 5px;
+			}
+			.cov0 { color: rgb(192, 0, 0) }
+.cov1 { color: rgb(128, 128, 128) }
+.cov2 { color: rgb(116, 140, 131) }
+.cov3 { color: rgb(104, 152, 134) }
+.cov4 { color: rgb(92, 164, 137) }
+.cov5 { color: rgb(80, 176, 140) }
+.cov6 { color: rgb(68, 188, 143) }
+.cov7 { color: rgb(56, 200, 146) }
+.cov8 { color: rgb(44, 212, 149) }
+.cov9 { color: rgb(32, 224, 152) }
+.cov10 { color: rgb(20, 236, 155) }
+
+		</style>
+	</head>
+	<body>
+		<div id="topbar">
+			<div id="nav">
+				<select id="files">
+				
+				<option value="file0">github.com/luqmanMohammed/eventsrunner-k8s-sensor/sensor/config/config.go (84.8%)</option>
+				
+				<option value="file1">github.com/luqmanMohammed/eventsrunner-k8s-sensor/sensor/eventqueue/eventqueue.go (96.7%)</option>
+				
+				<option value="file2">github.com/luqmanMohammed/eventsrunner-k8s-sensor/sensor/executor/eventsrunner/client/eventsrunner_client.go (66.7%)</option>
+				
+				<option value="file3">github.com/luqmanMohammed/eventsrunner-k8s-sensor/sensor/executor/script/scriptexecutor.go (77.3%)</option>
+				
+				<option value="file4">github.com/luqmanMohammed/eventsrunner-k8s-sensor/sensor/rules/collector/rule_collector.go (74.1%)</option>
+				
+				<option value="file5">github.com/luqmanMohammed/eventsrunner-k8s-sensor/sensor/rules/collector/validator/rule_validator.go (100.0%)</option>
+				
+				<option value="file6">github.com/luqmanMohammed/eventsrunner-k8s-sensor/sensor/sensor.go (85.6%)</option>
+				
+				<option value="file7">github.com/luqmanMohammed/eventsrunner-k8s-sensor/utils/utils.go (77.8%)</option>
+				
+				</select>
+			</div>
+			<div id="legend">
+				<span>not tracked</span>
+			
+				<span class="cov0">not covered</span>
+				<span class="cov8">covered</span>
+			
+			</div>
+		</div>
+		<div id="content">
+		
+		<pre class="file" id="file0" style="display: none">package config
+
+import (
+        "fmt"
+        "os"
+        "time"
+
+        "github.com/luqmanMohammed/eventsrunner-k8s-sensor/utils"
+        "github.com/spf13/viper"
+        "k8s.io/klog/v2"
+)
+
+var (
+        // DefaultConfig all author said defaults for the sensor.
+        // This config can be overwritten by a config file or environment variables.
+        // This config uses the log executor which will only log Rules.ID of the event.
+        DefaultConfig = map[string]interface{}{
+                // Sensor Config
+                "sensorName":     "er-k8s-sensor",
+                "kubeConfigPath": "",
+                // Rule Collector Config
+                "sensorNamespace":          "eventsrunner",
+                "sensorRuleConfigMapLabel": "er-k8s-sensor-rules=true",
+                // Event Queue
+                "workerCount":  10,
+                "maxTryCount":  5,
+                "requeueDelay": 30 * time.Second,
+                // Executor
+                "executorType": "log",
+                // Script Executor
+                "scriptDir":    "",
+                "scriptPrefix": "",
+                // Events Runner Executor
+                "authType":            "",
+                "eventsRunnerBaseURL": "",
+                "requestTimeout":      0,
+                "caCertPath":          "",
+                // JWT ER Executor
+                "jwtToken": "",
+                // mTLS ER Executor
+                "clientCertPath": "",
+                "clientKeyPath":  "",
+        }
+)
+
+// Config will be used to unmarshal the collected configs into a standardized struct.
+type Config struct {
+        // Sensor Config
+        LogVerbosity   int
+        SensorName     string
+        KubeConfigPath string
+        // Rule Collector Config
+        SensorNamespace          string
+        SensorRuleConfigMapLabel string
+        // Event Queue
+        WorkerCount  int
+        MaxTryCount  int
+        RequeueDelay time.Duration
+        // Executor
+        ExecutorType string
+        // Script Executor
+        ScriptDir    string
+        ScriptPrefix string
+        // Events Runner Executor
+        AuthType            string
+        EventsRunnerBaseURL string
+        RequestTimeout      time.Duration
+        CaCertPath          string
+        // JWT ER Executor
+        JWTToken string
+        // mTLS ER Executor
+        ClientCertPath string
+        ClientKeyPath  string
+}
+
+// ParseConfigFromViper will collect configs using viper and unmarshal them into
+// a Config Struct.
+// Viper is configured to collect configs in the following order:
+// 1. Default variables
+// 2. Environment variables
+// 3. Config file
+// Environment variables should start with the prefix ER_K8S_SENSOR_ to be collected.
+// Config file should be in the yaml format.
+// Config files will be collected in the following locations in the following order
+// unless if config file path is provided part of sensor command line arguments.
+// 1. /etc/er-k8s-sensor/config.yaml
+// 2. $HOME/.er-k8s-sensor/config.yaml
+func ParseConfigFromViper(cfgPath string, verbosity int) (*Config, error) <span class="cov8" title="1">{
+        klog.V(1).Infof("Collecting and parsing config from viper")
+        for key, value := range DefaultConfig </span><span class="cov8" title="1">{
+                viper.SetDefault(key, value)
+        }</span>
+        <span class="cov8" title="1">if cfgPath != "" </span><span class="cov8" title="1">{
+                klog.V(2).Infof("Collecting config from provided config file path: %s", cfgPath)
+                viper.SetConfigFile(cfgPath)
+        }</span> else<span class="cov8" title="1"> {
+                home, err := os.UserHomeDir()
+                if err != nil </span><span class="cov0" title="0">{
+                        klog.V(1).ErrorS(err, "failed to get user home directory. File based config wont be taken")
+                }</span>
+                <span class="cov8" title="1">viper.AddConfigPath("/etc/er-k8s-sensor")
+                viper.AddConfigPath(home + "/.er-k8s-sensor")
+                viper.SetConfigType("yaml")
+                viper.SetConfigName("config")</span>
+        }
+        <span class="cov8" title="1">klog.V(3).Info("Only environment variables starting with ER_K8S_SENSOR_ will be collected")
+        viper.AllowEmptyEnv(false)
+        viper.SetEnvPrefix("ER_K8S_SENSOR")
+        viper.AutomaticEnv()
+        if err := viper.ReadInConfig(); err == nil </span><span class="cov8" title="1">{
+                klog.V(1).Info("Using config file: ", viper.ConfigFileUsed())
+        }</span> else<span class="cov0" title="0"> {
+                klog.V(1).ErrorS(err, "failed to read config file. skipping config collection from files")
+        }</span>
+        <span class="cov8" title="1">if verbosity != 0 </span><span class="cov8" title="1">{
+                viper.Set("logVerbosity", verbosity)
+        }</span>
+        <span class="cov8" title="1">var config *Config
+        err := viper.Unmarshal(&amp;config)
+        if err != nil </span><span class="cov0" title="0">{
+                klog.V(1).ErrorS(err, "failed to unmarshal config")
+                return nil, err
+        }</span>
+        <span class="cov8" title="1">return config, nil</span>
+}
+
+// RequiredConfigMissingError custom error is returned when a required field is missing.
+// Missing config name will be returned as part of the error struct.
+type RequiredConfigMissingError struct {
+        ConfigName string
+}
+
+// Error function implements error interface
+func (rf *RequiredConfigMissingError) Error() string <span class="cov0" title="0">{
+        return fmt.Sprintf("required config %s is missing", rf.ConfigName)
+}</span>
+
+// AnyRequestedConfigMissing is an helper function which will check if any of the
+// configs, provided in the map of configs are missing.
+// If the value is the zero value of the type then its considered as missing.
+func AnyRequestedConfigMissing(configs map[string]interface{}) error <span class="cov8" title="1">{
+        missingConfig := utils.FindZeroValue(configs)
+        if missingConfig != "" </span><span class="cov8" title="1">{
+                return &amp;RequiredConfigMissingError{ConfigName: missingConfig}
+        }</span>
+        <span class="cov8" title="1">return nil</span>
+}
+</pre>
+		
+		<pre class="file" id="file1" style="display: none">package eventqueue
+
+import (
+        "sync"
+        "time"
+
+        "github.com/luqmanMohammed/eventsrunner-k8s-sensor/sensor/rules"
+        "k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+        "k8s.io/client-go/util/workqueue"
+        "k8s.io/klog/v2"
+)
+
+// Event struct holds all information related to an event.
+// TODO: Add json tags to the struct.
+type Event struct {
+        EventType rules.EventType              `json:"eventType"`
+        RuleID    rules.RuleID                 `json:"ruleID"`
+        Objects   []*unstructured.Unstructured `json:"objects"`
+        tries     int                          `json:"-"`
+}
+
+// QueueItemExecutor all queue executors must implement this interface.
+// Execute method will be called for each item in the queue.
+type QueueExecutor interface {
+        Execute(event *Event) error
+}
+
+// MockQueueExecutor is a mock implementation of QueueExecutor interface.
+// It is used for testing or as a placeholder.
+type MockQueueExecutor struct{}
+
+func (*MockQueueExecutor) Execute(event *Event) error <span class="cov0" title="0">{
+        return nil
+}</span>
+
+// EventQueue wraps around the workqueue.DelayingInterface and provides
+// additional functionality.
+// Adds functionality to process and retry items if failed.
+type EventQueue struct {
+        workqueue.DelayingInterface
+        workerCount  int
+        maxTryCount  int
+        requeueDelay time.Duration
+        executor     QueueExecutor
+}
+
+// EventQueueOpts holds the configuration options for the EventQueue.
+// WorkerCount is the number of workers to start.
+// MaxTryCount is the maximum number of times an item will be retried.
+// RequeueDelay is the delay in seconds before an item is retried.
+type EventQueueOpts struct {
+        WorkerCount  int
+        MaxTryCount  int
+        RequeueDelay time.Duration
+}
+
+// Creates a New EventQueue and returns the pointer to it.
+func New(executor QueueExecutor, queueOpts EventQueueOpts) *EventQueue <span class="cov8" title="1">{
+        eq := &amp;EventQueue{
+                DelayingInterface: workqueue.NewDelayingQueue(),
+                workerCount:       queueOpts.WorkerCount,
+                maxTryCount:       queueOpts.MaxTryCount,
+                requeueDelay:      queueOpts.RequeueDelay,
+                executor:          executor,
+        }
+
+        return eq
+}</span>
+
+// StartQueueWorkerPool will start a pool of workers to process queue items.
+// Blocks until all workers have finished. The number of workers is determined by the
+// workerCount parameter.
+// Closing the queue will cause the queue to be drained and all workers to exit.
+func (eq *EventQueue) StartQueueWorkerPool() <span class="cov8" title="1">{
+        klog.V(2).Info("Starting queue worker pool")
+        klog.V(2).Infof("Number of workers: %d", eq.workerCount)
+        wg := sync.WaitGroup{}
+        wg.Add(eq.workerCount)
+        for i := 0; i &lt; eq.workerCount; i++ </span><span class="cov8" title="1">{
+                go eq.startWorker(&amp;wg)
+        }</span>
+        <span class="cov8" title="1">wg.Wait()
+        klog.V(2).Info("All queue workers have successfully stopped")</span>
+}
+
+// processItem will process the item from the queue.
+// Execute method will be called for each item in the queue.
+// If the Execute method returns an error, the item will be added back into the
+// queue after the configured delay.
+// Event will be retried up to the configured maxTryCount, then it will removed from the
+// the queue.
+// If the Execute method returns nil for the error, the item will be removed from the queue.
+func (eq *EventQueue) processItem(event *Event) <span class="cov8" title="1">{
+        event.tries++
+        klog.V(3).Infof("Processing event from rule %s, tries: %d", event.RuleID, event.tries)
+        err := eq.executor.Execute(event)
+        if err != nil </span><span class="cov8" title="1">{
+                klog.V(2).ErrorS(err, "Error during execution of event")
+                if event.tries &lt; eq.maxTryCount </span><span class="cov8" title="1">{
+                        klog.V(3).Info("Adding event to queue to be retried")
+                        eq.DelayingInterface.AddAfter(event, eq.requeueDelay)
+                }</span>
+        }
+}
+
+// startWorker will start the worker.
+// An infinite loop will be started and the worker will process items, until the
+// queue is closed, which will cause the worker to exit.
+// If the item in the queue is not an Event, it will be ignored.
+func (eq *EventQueue) startWorker(wg *sync.WaitGroup) <span class="cov8" title="1">{
+        klog.V(3).Info("Starting worker")
+        for </span><span class="cov8" title="1">{
+                item, quit := eq.DelayingInterface.Get()
+                if quit </span><span class="cov8" title="1">{
+                        break</span>
+                }
+                <span class="cov8" title="1">event, ok := item.(*Event)
+                if ok </span><span class="cov8" title="1">{
+                        eq.processItem(event)
+                }</span>
+                <span class="cov8" title="1">eq.DelayingInterface.Done(item)</span>
+        }
+        <span class="cov8" title="1">klog.V(3).Info("Worker has successfully stopped")
+        wg.Done()</span>
+}
+</pre>
+		
+		<pre class="file" id="file2" style="display: none">package client
+
+import (
+        "bytes"
+        "crypto/tls"
+        "crypto/x509"
+        "encoding/json"
+        "errors"
+        "fmt"
+        "io/ioutil"
+        "net/http"
+        "strings"
+        "time"
+
+        "github.com/luqmanMohammed/eventsrunner-k8s-sensor/sensor/config"
+        "github.com/luqmanMohammed/eventsrunner-k8s-sensor/sensor/eventqueue"
+        "k8s.io/klog/v2"
+)
+
+// AuthType to determine the authentication type
+type AuthType string
+
+const (
+        mTLS AuthType = "mTLS"
+        JWT  AuthType = "jwt"
+)
+
+// EventsRunnerClientOpts is a struct that contains the options for the EventsRunnerClient
+// If mTLS Auth Client is used, the following options are required:
+// - CaCertPath: Path to the CA certificate
+// - ClientCertPath: Path to the client certificate
+// - ClientKeyPath: Path to the client key
+// If JWT Auth Client is used, the following options are required:
+// - JWTToken: JWT token
+// In both cases, the following options are required:
+// - EventsRunnerBaseURL: Base URL of the EventsRunner
+type EventsRunnerClientOpts struct {
+        EventsRunnerBaseURL string
+        CaCertPath          string
+        ClientKeyPath       string
+        ClientCertPath      string
+        RequestTimeout      time.Duration
+        JWTToken            string
+}
+
+// EventsRunnerClient holds an http.Client and required headers
+// to be used for sending requests to the EventsRunner
+type EventsRunnerClient struct {
+        eventsRunnerBaseURL string
+        httpClient          *http.Client
+        headers             map[string]string
+}
+
+// createTLSConfig creates a TLS config based on the provided CA cert path,
+// client key path and client cert path.
+// If Client parameters are empty, only CA will be used to create the TLS
+// config, which is usefull for HTTPS JWT Authentication
+func createTLSConfig(caCertPath, clientKeyPath, clientCertPath string) (*tls.Config, error) <span class="cov8" title="1">{
+        klog.V(2).Infof("Reading CA cert from %s", caCertPath)
+        caCert, err := ioutil.ReadFile(caCertPath)
+        if err != nil </span><span class="cov0" title="0">{
+                klog.V(2).ErrorS(err, "Failed to read CA cert")
+                return nil, err
+        }</span>
+        <span class="cov8" title="1">caCertPool := x509.NewCertPool()
+        if ok := caCertPool.AppendCertsFromPEM(caCert); !ok </span><span class="cov0" title="0">{
+                klog.V(2).ErrorS(fmt.Errorf("failed to append CA cert"), "Failed to create CA cert pool")
+                return nil, errors.New("failed to setup tls config")
+        }</span>
+        <span class="cov8" title="1">tlsConfig := &amp;tls.Config{
+                RootCAs: caCertPool,
+        }
+        if clientCertPath != "" &amp;&amp; clientKeyPath != "" </span><span class="cov8" title="1">{
+                klog.V(2).Infof("Reading client cert from %s", clientCertPath)
+                klog.V(2).Infof("Reading client key from %s", clientKeyPath)
+                clientCert, err := tls.LoadX509KeyPair(clientCertPath, clientKeyPath)
+                if err != nil </span><span class="cov0" title="0">{
+                        klog.V(2).ErrorS(err, "Failed to create client tls config")
+                        return nil, err
+                }</span>
+                <span class="cov8" title="1">tlsConfig.Certificates = []tls.Certificate{clientCert}</span>
+        }
+        <span class="cov8" title="1">return tlsConfig, nil</span>
+}
+
+// newMutualTLSAuthClient creates a new EventsRunnerClient with mutual TLS authentication.
+// Configures the client to use the provided CA cert path, client key path and client cert path.
+// If JWT Token is provided, it will be added in the request Authorization header.
+func newMutualTLSClient(erClientOpts *EventsRunnerClientOpts) (*EventsRunnerClient, error) <span class="cov8" title="1">{
+        tlsConfig, err := createTLSConfig(erClientOpts.CaCertPath, erClientOpts.ClientKeyPath, erClientOpts.ClientCertPath)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+        <span class="cov8" title="1">httpClient := &amp;http.Client{
+                Timeout: erClientOpts.RequestTimeout,
+                Transport: &amp;http.Transport{
+                        TLSClientConfig: tlsConfig,
+                },
+        }
+        headers := make(map[string]string)
+        if erClientOpts.JWTToken != "" </span><span class="cov0" title="0">{
+                klog.V(2).Infof("Adding JWT token to request Authorization header since its provided")
+                headers["Authorization"] = "Bearer " + erClientOpts.JWTToken
+        }</span>
+        <span class="cov8" title="1">headers["Content-Type"] = "application/json"
+        return &amp;EventsRunnerClient{
+                eventsRunnerBaseURL: erClientOpts.EventsRunnerBaseURL,
+                httpClient:          httpClient,
+                headers:             headers,
+        }, nil</span>
+}
+
+// newJWTAuthClient creates a new EventsRunnerClient with JWT authentication.
+// Requires the JWT Token to be provided.
+// If the server is HTTPS, CACertPath Option is required, the client will use
+// the provided CA cert for server certificate verification.
+// If all required options are present, set tryMTLS flag to true, client will
+// try to initialize a mutual TLS client with JWT Token in the request Authorization
+// header.
+func newJWTClient(erClientOpts *EventsRunnerClientOpts, tryMTLS bool, httpsEndpoint bool) (*EventsRunnerClient, error) <span class="cov8" title="1">{
+        var tlsConfig *tls.Config
+        if tryMTLS </span><span class="cov0" title="0">{
+                klog.V(2).Infof("Trying to initialize a mutual TLS client")
+                var err error
+                tlsConfig, err = createTLSConfig(erClientOpts.CaCertPath, erClientOpts.ClientKeyPath, erClientOpts.ClientCertPath)
+                if err != nil </span><span class="cov0" title="0">{
+                        klog.V(2).Infof("TLS config was provided but failed to create: %v", err)
+                }</span>
+        } else<span class="cov8" title="1"> if httpsEndpoint </span><span class="cov8" title="1">{
+                klog.V(2).Info("Endpoint identified to be HTTPS, CA cert path is required")
+                var err error
+                tlsConfig, err = createTLSConfig(erClientOpts.CaCertPath, "", "")
+                if err != nil </span><span class="cov0" title="0">{
+                        return nil, err
+                }</span>
+        }
+        <span class="cov8" title="1">headers := make(map[string]string)
+        headers["Authorization"] = "Bearer " + erClientOpts.JWTToken
+        headers["Content-Type"] = "application/json"
+        httpClient := &amp;http.Client{
+                Timeout: erClientOpts.RequestTimeout,
+                Transport: &amp;http.Transport{
+                        TLSClientConfig: tlsConfig,
+                },
+        }
+        return &amp;EventsRunnerClient{
+                eventsRunnerBaseURL: erClientOpts.EventsRunnerBaseURL,
+                httpClient:          httpClient,
+                headers:             headers,
+        }, nil</span>
+}
+
+// New creates a new EventsRunnerClient with the provided options.
+// Authentication mode is determined by the authType argument.
+// If EventsRunnerBaseURL is an HTTPS endpoint, CACertPath Option is required even
+// if JWT authentication is used.
+// Check EventsRunnerClientOpts for each authentication methods requirements.
+func New(authType AuthType, erClientOpts *EventsRunnerClientOpts) (*EventsRunnerClient, error) <span class="cov8" title="1">{
+        mTLSRequirementsErr := config.AnyRequestedConfigMissing(map[string]interface{}{
+                "CaCertPath":     erClientOpts.CaCertPath,
+                "ClientKeyPath":  erClientOpts.ClientKeyPath,
+                "ClientCertPath": erClientOpts.ClientCertPath,
+        })
+        if authType == "" </span><span class="cov0" title="0">{
+                return nil, &amp;config.RequiredConfigMissingError{ConfigName: "authType"}
+        }</span>
+        <span class="cov8" title="1">klog.V(2).Infof("checking requirements for EventsRunner Client with authType: %s", authType)
+        if basicRequirementErr := config.AnyRequestedConfigMissing(map[string]interface{}{
+                "EventsRunnerBaseURL": erClientOpts.EventsRunnerBaseURL,
+        }); basicRequirementErr != nil </span><span class="cov0" title="0">{
+                return nil, basicRequirementErr
+        }</span>
+        <span class="cov8" title="1">if authType == JWT </span><span class="cov8" title="1">{
+                if jwtRequirementsErr := config.AnyRequestedConfigMissing(map[string]interface{}{
+                        "JWTToken": erClientOpts.JWTToken,
+                }); jwtRequirementsErr != nil </span><span class="cov0" title="0">{
+                        return nil, jwtRequirementsErr
+                }</span>
+                <span class="cov8" title="1">if strings.HasPrefix(erClientOpts.EventsRunnerBaseURL, "https") </span><span class="cov8" title="1">{
+                        if httpsRequirementsErr := config.AnyRequestedConfigMissing(map[string]interface{}{
+                                "CaCertPath": erClientOpts.CaCertPath,
+                        }); httpsRequirementsErr != nil </span><span class="cov0" title="0">{
+                                return nil, httpsRequirementsErr
+                        }</span>
+                }
+                <span class="cov8" title="1">return newJWTClient(erClientOpts, mTLSRequirementsErr == nil, strings.HasPrefix(erClientOpts.EventsRunnerBaseURL, "https"))</span>
+
+        } else<span class="cov8" title="1"> if authType == mTLS </span><span class="cov8" title="1">{
+                if mTLSRequirementsErr != nil </span><span class="cov0" title="0">{
+                        return nil, mTLSRequirementsErr
+                }</span>
+                <span class="cov8" title="1">return newMutualTLSClient(erClientOpts)</span>
+        }
+        <span class="cov0" title="0">return nil, fmt.Errorf("authType %s is not supported", authType)</span>
+}
+
+// ProcessEvent sends the event to the EventsRunner server, and will wait
+// for a response.
+// Only a Response code 200 (Subject to Change) is considered a success.
+// Requests will be sent to "&lt;base url&gt;/api/v1/events".
+func (er EventsRunnerClient) ProcessEvent(event *eventqueue.Event) error <span class="cov8" title="1">{
+        klog.V(3).Infof("Processing event with rule ID: %s", event.RuleID)
+        eventJson, err := json.Marshal(event)
+        if err != nil </span><span class="cov0" title="0">{
+                klog.V(3).ErrorS(err, "Failed to marshal event")
+                return err
+        }</span>
+        <span class="cov8" title="1">requestURI := fmt.Sprintf("%s/api/v1/events", er.eventsRunnerBaseURL)
+        req, err := http.NewRequest("POST", requestURI, bytes.NewBuffer(eventJson))
+        if err != nil </span><span class="cov0" title="0">{
+                klog.V(3).ErrorS(err, "Failed to create request")
+                return err
+        }</span>
+        <span class="cov8" title="1">for k, v := range er.headers </span><span class="cov8" title="1">{
+                req.Header.Set(k, v)
+        }</span>
+        <span class="cov8" title="1">klog.V(3).Infof("Sending request to %s for event with rule ID", requestURI, event.RuleID)
+        resp, err := er.httpClient.Do(req)
+        if err != nil </span><span class="cov0" title="0">{
+                klog.V(3).ErrorS(err, "Failed to send request")
+                return err
+        }</span>
+        <span class="cov8" title="1">klog.V(3).Infof("Got response of %s for event with rule ID: %s", event.RuleID, resp.Status)
+        if resp.StatusCode != 200 </span><span class="cov0" title="0">{
+                klog.V(3).ErrorS(fmt.Errorf("failed due to response code %d", resp.StatusCode), "Failed to process event")
+                return fmt.Errorf("failed to process event. Got status %d", resp.StatusCode)
+        }</span>
+        <span class="cov8" title="1">return nil</span>
+}
+</pre>
+		
+		<pre class="file" id="file3" style="display: none">package script
+
+import (
+        "encoding/base64"
+        "encoding/json"
+        "errors"
+        "fmt"
+        "os"
+        "os/exec"
+
+        "github.com/luqmanMohammed/eventsrunner-k8s-sensor/sensor/config"
+        "github.com/luqmanMohammed/eventsrunner-k8s-sensor/sensor/eventqueue"
+        "k8s.io/klog/v2"
+)
+
+var (
+        // ErrInvalidScriptFile is returned when the script file is not a regular file.
+        ErrInvalidScriptFile = errors.New("invalid script file")
+        // ErrFileIsNotExecutable is returned when the script file is not executable.
+        ErrFileIsNotExecutable = errors.New("file is not executable")
+)
+
+// ScriptExecutor is an implementation of QueueExecutor interface in the
+// eventqueue package.
+// Script executor will execute configured scripts according to the event
+// received from the event queue.
+// Scripts should be in the following naming convention
+// &lt;ScriptDir&gt;/&lt;ScriptPrefix&gt;-&lt;RuleID&gt;.sh .
+// Scripts should be executable.
+// CAUTION: Make sure to vet the script before allowing the sensor to
+// run it, since the sensor does not do any kind of verification.
+// Implemented as a Proof of Concept. Passing on the event to eventsrunner
+// will be more scalable, easier to maintain and secure.
+type ScriptExecutor struct {
+        scriptDir    string
+        scriptPrefix string
+}
+
+// NewScriptExecutor creates a new instance of ScriptExecutor.
+// ScriptDir and ScriptPrefix are configs are required.
+func New(scriptDir, scriptPrefix string) (*ScriptExecutor, error) <span class="cov8" title="1">{
+        if err := config.AnyRequestedConfigMissing(map[string]interface{}{
+                "ScriptDir":    scriptDir,
+                "ScriptPrefix": scriptPrefix,
+        }); err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+        <span class="cov8" title="1">return &amp;ScriptExecutor{
+                scriptDir:    scriptDir,
+                scriptPrefix: scriptPrefix,
+        }, nil</span>
+}
+
+// Execute executes the script for the given event.
+// Execute function will construct the script path and execute it.
+// The relevent event information will be passed to the script as
+// an base64 encoded JSON string in the form of an environment variable
+// with the name EVENT.
+// Execute will return errors if the script is not an executable or if
+// the script is invalid.
+// OS STDOUT and STDERR will be used for the script.
+// TODO: Add file STDOUT and STDERR for scripts
+func (se *ScriptExecutor) Execute(event *eventqueue.Event) error <span class="cov8" title="1">{
+        script := fmt.Sprintf("%s/%s-%s.sh", se.scriptDir, se.scriptPrefix, event.RuleID)
+        klog.V(2).Infof("Executing script %s", script)
+        if fileInfo, err := os.Stat(script); err != nil </span><span class="cov0" title="0">{
+                return err
+        }</span> else<span class="cov8" title="1"> if fileInfo.IsDir() </span><span class="cov0" title="0">{
+                return ErrInvalidScriptFile
+        }</span> else<span class="cov8" title="1"> if fileInfo.Mode()&amp;0111 == 0 </span><span class="cov0" title="0">{
+                return ErrFileIsNotExecutable
+        }</span>
+        <span class="cov8" title="1">eventJson, err := json.Marshal(event)
+        if err != nil </span><span class="cov0" title="0">{
+                return err
+        }</span>
+        <span class="cov8" title="1">encodedEventJson := base64.StdEncoding.EncodeToString(eventJson)
+        cmd := exec.Command(script)
+        env := os.Environ()
+        env = append(env, fmt.Sprintf("EVENT=%s", encodedEventJson))
+        cmd.Env = env
+        cmd.Stdout = os.Stdout
+        cmd.Stderr = os.Stderr
+        return cmd.Run()</span>
+}
+</pre>
+		
+		<pre class="file" id="file4" style="display: none">package collector
+
+import (
+        "context"
+        "encoding/json"
+        "errors"
+        "fmt"
+
+        "github.com/luqmanMohammed/eventsrunner-k8s-sensor/sensor/rules"
+        "github.com/luqmanMohammed/eventsrunner-k8s-sensor/sensor/rules/collector/validator"
+        v1 "k8s.io/api/core/v1"
+        metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+        "k8s.io/client-go/informers"
+        "k8s.io/client-go/kubernetes"
+        "k8s.io/client-go/tools/cache"
+        "k8s.io/klog/v2"
+)
+
+// SensorReloadInterface should be implemented by sensors which needs to
+// support automatic reloading of rules.
+type SensorReloadInterface interface {
+        ReloadRules(sensorRules map[rules.RuleID]*rules.Rule)
+}
+
+// ConfigMapRuleCollector is used to collect rules from a kubernetes configmaps.
+// Rules will be collect from the configmaps in the sensor namespace with the
+// label provided via the sensorRuleConfigMapLabel field.
+type ConfigMapRuleCollector struct {
+        clientSet                *kubernetes.Clientset
+        sensorNamespace          string
+        sensorRuleConfigMapLabel string
+}
+
+// NewConfigMapRuleCollector returns a new ConfigMapRuleCollector.
+func NewConfigMapRuleCollector(clientSet *kubernetes.Clientset, sensorNamespace string, sensorRuleConfigMapLabel string) *ConfigMapRuleCollector <span class="cov8" title="1">{
+        return &amp;ConfigMapRuleCollector{
+                clientSet:                clientSet,
+                sensorNamespace:          sensorNamespace,
+                sensorRuleConfigMapLabel: sensorRuleConfigMapLabel,
+        }
+}</span>
+
+// Collect will return all rules from the configmaps in the sensor namespace
+// with the label configured via sensorRuleConfigMapLabel.
+// Only one copy of the duplicate rules will be returned.
+// If the configmap does not exist or the rules are invalid, an empty map will
+// be returned.
+// If unable to list all configmaps in the sensor namespace, an error will be
+// returned.
+func (cmrc ConfigMapRuleCollector) Collect(ctx context.Context) (map[rules.RuleID]*rules.Rule, error) <span class="cov8" title="1">{
+        klog.V(1).Infof("Collecting rules from %v namespace with label %v", cmrc.sensorNamespace, cmrc.sensorRuleConfigMapLabel)
+        cmList, err := cmrc.clientSet.CoreV1().ConfigMaps(cmrc.sensorNamespace).List(ctx, metav1.ListOptions{
+                LabelSelector: cmrc.sensorRuleConfigMapLabel,
+        })
+        if err != nil </span><span class="cov0" title="0">{
+                klog.V(1).ErrorS(err, "Error trying to list configmaps")
+                return nil, err
+        }</span>
+        <span class="cov8" title="1">klog.V(1).Infof("Number of configmaps to process: %d", len(cmList.Items))
+        rules := cmrc.parseCollectedConfigMapsIntoRules(cmList.Items)
+        return rules, nil</span>
+}
+
+// parseCollectedConfigMapsIntoRules parses provided list of configmaps into
+// a map of rules.
+// Data field of configmap should contain key `rules`, which should contain a json
+// list of valid rules (Refer rules.Rule struct doc for further information).
+// Each rule should contain a valid rule ID, else rule wont be processed.
+// If any errors are found during json decoding, error will be logged and the
+// function will continue executing.
+func (cmrc ConfigMapRuleCollector) parseCollectedConfigMapsIntoRules(cmList []v1.ConfigMap) map[rules.RuleID]*rules.Rule <span class="cov8" title="1">{
+        parsedRules := make(map[rules.RuleID]*rules.Rule)
+        for _, cm := range cmList </span><span class="cov8" title="1">{
+                tmpRules := make([]*rules.Rule, 0)
+                rulesStr, ok := cm.Data["rules"]
+                if !ok </span><span class="cov0" title="0">{
+                        klog.V(2).Infof("Collected configmap %v, doesn't contain 'rules' key. Skipping", cm.Name)
+                        continue</span>
+                }
+                <span class="cov8" title="1">if errJsonUnMarshal := json.Unmarshal([]byte(rulesStr), &amp;tmpRules); errJsonUnMarshal != nil </span><span class="cov0" title="0">{
+                        klog.V(2).ErrorS(errJsonUnMarshal, fmt.Sprintf("JSON error when decoding content of configmap %v. Skipping", cm.Name))
+                        continue</span>
+                }
+                <span class="cov8" title="1">for _, rule := range tmpRules </span><span class="cov8" title="1">{
+                        switch validator.NormalizeAndValidateRule(rule) </span>{
+                        case nil:<span class="cov8" title="1">
+                                klog.V(3).Infof("Rule %v is valid", rule.ID)</span>
+                        case validator.ErrRuleIDNotFound:<span class="cov0" title="0">
+                                klog.V(3).ErrorS(validator.ErrRuleIDNotFound, fmt.Sprintf("Rule %v doesn't have an ID. Skipping", rule.ID))
+                                continue</span>
+                        case validator.ErrRuleEventTypesNotFound:<span class="cov0" title="0">
+                                klog.V(3).ErrorS(validator.ErrRuleEventTypesNotFound, fmt.Sprintf("Rule %v doesn't have an event types list. Skipping", rule.ID))
+                                continue</span>
+                        case validator.ErrRuleEventTypesNotValid:<span class="cov0" title="0">
+                                klog.V(3).ErrorS(validator.ErrRuleEventTypesNotValid, fmt.Sprintf("Rule %v has an invalid event types list. Should be one of added, modified or deleted. Skipping", rule.ID))
+                                continue</span>
+                        }
+                        <span class="cov8" title="1">if _, ok := parsedRules[rule.ID]; !ok </span><span class="cov8" title="1">{
+                                parsedRules[rule.ID] = rule
+                                klog.V(3).Infof("Rule %v successfully loaded from configmap %v", rule.ID, cm.Name)
+                        }</span>
+                }
+        }
+        <span class="cov8" title="1">return parsedRules</span>
+}
+
+// StartRuleCollector will continuously listen for rule configmap changes and
+// will reload the rules of the provided sensor.
+// Cancelling the provided context will stop the collector.
+func (cmrc ConfigMapRuleCollector) StartRuleCollector(ctx context.Context, sensorRI SensorReloadInterface) <span class="cov8" title="1">{
+        parseStoreIntoConfigMaps := func(store cache.Store) []v1.ConfigMap </span><span class="cov8" title="1">{
+                cmList := make([]v1.ConfigMap, len(store.ListKeys()))
+                for i, cm := range store.List() </span><span class="cov8" title="1">{
+                        cmList[i] = *cm.(*v1.ConfigMap)
+                }</span>
+                <span class="cov8" title="1">return cmList</span>
+        }
+        <span class="cov8" title="1">klog.V(1).Info("Configuring continuos rule collector")
+        changeQueue := make(chan struct{}, 10)
+        informerFactory := informers.NewSharedInformerFactoryWithOptions(cmrc.clientSet, 0, informers.WithNamespace(cmrc.sensorNamespace), informers.WithTweakListOptions(func(lo *metav1.ListOptions) </span><span class="cov8" title="1">{
+                lo.LabelSelector = cmrc.sensorRuleConfigMapLabel
+        }</span>))
+        <span class="cov8" title="1">informerFactory.Core().V1().ConfigMaps().Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+                AddFunc: func(obj interface{}) </span><span class="cov8" title="1">{
+                        changeQueue &lt;- struct{}{}
+                }</span>,
+                UpdateFunc: func(oldObj, newObj interface{}) <span class="cov0" title="0">{
+                        changeQueue &lt;- struct{}{}
+                }</span>,
+                DeleteFunc: func(obj interface{}) <span class="cov0" title="0">{
+                        changeQueue &lt;- struct{}{}
+                }</span>,
+        })
+        <span class="cov8" title="1">klog.V(1).Info("Starting continuos rule collector")
+        go informerFactory.Start(ctx.Done())
+        if !cache.WaitForCacheSync(ctx.Done(), informerFactory.Core().V1().ConfigMaps().Informer().HasSynced) </span><span class="cov0" title="0">{
+                klog.V(2).ErrorS(errors.New("ConfigMap Cache Wait Failed"), "")
+        }</span>
+        <span class="cov8" title="1">for </span><span class="cov8" title="1">{
+                select </span>{
+                case &lt;-ctx.Done():<span class="cov8" title="1">
+                        klog.V(1).Info("Stopping rule collector")
+                        close(changeQueue)
+                        return</span>
+                case &lt;-changeQueue:<span class="cov8" title="1">
+                        klog.V(2).Info("Rule change detected. Parsing and reloading rules")
+                        configMapList := parseStoreIntoConfigMaps(informerFactory.Core().V1().ConfigMaps().Informer().GetStore())
+                        ruleMap := cmrc.parseCollectedConfigMapsIntoRules(configMapList)
+                        sensorRI.ReloadRules(ruleMap)</span>
+                }
+        }
+}
+</pre>
+		
+		<pre class="file" id="file5" style="display: none">package validator
+
+import (
+        "errors"
+        "strings"
+
+        "github.com/luqmanMohammed/eventsrunner-k8s-sensor/sensor/rules"
+        "k8s.io/klog/v2"
+)
+
+var (
+        // ErrRuleIDNotFound is returned when a rule doesn't have an ID.
+        ErrRuleIDNotFound = errors.New("rule ID not found")
+        // ErrRuleEventTypesNotFound is returned when a rule doesn't have
+        // an event types list.
+        ErrRuleEventTypesNotFound = errors.New("rule event types not found")
+        // ErrRuleEventTypesNotValid is returned when one or more event types
+        // in rule is invalid.
+        ErrRuleEventTypesNotValid = errors.New("rule event types not valid")
+)
+
+// NormalizeAndValidateRule validates and normalizes a rule.
+// Normalized by making all event types lowercase and removing duplicates.
+// Normalized by making all updateOn values lowercase and removing duplicates.
+func NormalizeAndValidateRule(rule *rules.Rule) error <span class="cov8" title="1">{
+        klog.V(3).Infof("Validating rule: %s", rule.ID)
+        if rule.ID == "" </span><span class="cov8" title="1">{
+                return ErrRuleIDNotFound
+        }</span>
+        <span class="cov8" title="1">if len(rule.EventTypes) == 0 </span><span class="cov8" title="1">{
+                return ErrRuleEventTypesNotFound
+        }</span>
+        <span class="cov8" title="1">uniqueEventTypesSet := map[rules.EventType]struct{}{}
+        normalizedEventTypes := make([]rules.EventType, 0, len(rule.EventTypes))
+        for _, eventType := range rule.EventTypes </span><span class="cov8" title="1">{
+                lowerEventType := rules.EventType(strings.ToLower(string(eventType)))
+                if _, ok := uniqueEventTypesSet[lowerEventType]; ok </span><span class="cov8" title="1">{
+                        continue</span>
+                }
+                <span class="cov8" title="1">normalizedEventTypes = append(normalizedEventTypes, lowerEventType)
+                uniqueEventTypesSet[lowerEventType] = struct{}{}</span>
+        }
+        <span class="cov8" title="1">normalizedUpdateOnSet := map[string]struct{}{}
+        normalizedUpdateOn := make([]string, 0, len(rule.UpdatesOn))
+        for _, updateOn := range rule.UpdatesOn </span><span class="cov8" title="1">{
+                lowerUpdateOn := strings.ToLower(string(updateOn))
+                if _, ok := normalizedUpdateOnSet[lowerUpdateOn]; ok </span><span class="cov8" title="1">{
+                        continue</span>
+                }
+                <span class="cov8" title="1">normalizedUpdateOn = append(normalizedUpdateOn, lowerUpdateOn)
+                normalizedUpdateOnSet[lowerUpdateOn] = struct{}{}</span>
+        }
+        <span class="cov8" title="1">rule.UpdatesOn = normalizedUpdateOn
+        rule.EventTypes = normalizedEventTypes
+        for _, eventType := range rule.EventTypes </span><span class="cov8" title="1">{
+                if eventType != rules.ADDED &amp;&amp; eventType != rules.MODIFIED &amp;&amp; eventType != rules.DELETED </span><span class="cov8" title="1">{
+                        return ErrRuleEventTypesNotValid
+                }</span>
+        }
+        <span class="cov8" title="1">return nil</span>
+}
+</pre>
+		
+		<pre class="file" id="file6" style="display: none">package sensor
+
+import (
+        "context"
+        "fmt"
+        "os"
+        "os/signal"
+        "reflect"
+        "sync"
+        "syscall"
+        "time"
+
+        "github.com/luqmanMohammed/eventsrunner-k8s-sensor/sensor/config"
+        "github.com/luqmanMohammed/eventsrunner-k8s-sensor/sensor/eventqueue"
+        "github.com/luqmanMohammed/eventsrunner-k8s-sensor/sensor/executor"
+        "github.com/luqmanMohammed/eventsrunner-k8s-sensor/sensor/executor/eventsrunner/client"
+        "github.com/luqmanMohammed/eventsrunner-k8s-sensor/sensor/rules"
+        "github.com/luqmanMohammed/eventsrunner-k8s-sensor/sensor/rules/collector"
+        "github.com/luqmanMohammed/eventsrunner-k8s-sensor/utils"
+        metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+        "k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+        "k8s.io/client-go/dynamic"
+        "k8s.io/client-go/dynamic/dynamicinformer"
+        "k8s.io/client-go/informers"
+        "k8s.io/client-go/kubernetes"
+        "k8s.io/client-go/rest"
+        "k8s.io/client-go/tools/cache"
+        "k8s.io/klog/v2"
+)
+
+// SensorState type depicts the state of the sensor.
+type SensorState int
+
+const (
+        STARTING SensorState = iota
+        RUNNING
+        STOPPING
+        STOPPED
+)
+
+// ruleInformer holds information related to a rule in runtime
+// along with the informer that is responsible for listening to the
+// events for a specific rule.
+// Closing the stopChan channel will stop the informer which prevents
+// events for the specific rule from being collected.
+type ruleInformer struct {
+        rule              *rules.Rule
+        informerStartTime time.Time
+        informer          informers.GenericInformer
+        stopChan          chan struct{}
+}
+
+// startInformer starts the informer for a specific rule.
+func (rr *ruleInformer) startInformer() <span class="cov8" title="1">{
+        klog.V(2).Infof("Starting informer for rule %v", rr.rule.ID)
+        go rr.informer.Informer().Run(rr.stopChan)
+}</span>
+
+// SensorOpts holds options related to sensor configuration
+// - KubConfig : kubernetes config
+// - EventQueueOpts : event queue options. Refer eventqueue.EventQueueOpts
+// - SensorName: name of the sensor
+type SensorOpts struct {
+        eventqueue.EventQueueOpts
+        KubeConfig *rest.Config
+        SensorName string
+}
+
+// Sensor struct implements kubernetes informers to sense changes
+// according to the rules defined.
+// Responsible for managing all informers and event queue
+type Sensor struct {
+        *SensorOpts
+        dynamicClientSet dynamic.Interface
+        Queue            *eventqueue.EventQueue
+        ruleInformers    map[rules.RuleID]*ruleInformer
+        stopChan         chan struct{}
+        state            SensorState
+        lock             sync.Mutex
+}
+
+// Creates a new default Sensor. Refer Sensor struct documentation for
+// more information.
+// SensorOpts is required.
+func New(sensorOpts *SensorOpts, executor eventqueue.QueueExecutor) *Sensor <span class="cov8" title="1">{
+        if sensorOpts == nil </span><span class="cov0" title="0">{
+                panic("SensorOpts cannot be nil")</span>
+        }
+        <span class="cov8" title="1">dynamicClientSet := dynamic.NewForConfigOrDie(sensorOpts.KubeConfig)
+        return &amp;Sensor{
+                SensorOpts:       sensorOpts,
+                dynamicClientSet: dynamicClientSet,
+                ruleInformers:    make(map[rules.RuleID]*ruleInformer),
+                stopChan:         make(chan struct{}),
+                Queue:            eventqueue.New(executor, sensorOpts.EventQueueOpts),
+        }</span>
+}
+
+// addFuncWrapper injects the rules into the add resource event handler
+// function without affecting its signature.
+// Makes event handler addition dynamic based on the rules by returning nil if
+// ADDED event type is not configured for a specific rule.
+// If the objects where created before the start of the rule, the event wont be
+// processed.
+func (s *Sensor) addFuncWrapper(ruleInf *ruleInformer) func(obj interface{}) <span class="cov8" title="1">{
+        for _, t_eventType := range ruleInf.rule.EventTypes </span><span class="cov8" title="1">{
+                if t_eventType == rules.ADDED </span><span class="cov8" title="1">{
+                        return func(obj interface{}) </span><span class="cov8" title="1">{
+                                unstructuredObj := obj.(*unstructured.Unstructured)
+                                if !unstructuredObj.GetCreationTimestamp().After(ruleInf.informerStartTime) </span><span class="cov8" title="1">{
+                                        klog.V(4).Infof("Object %v was created before the start of the rule %v", unstructuredObj.GetName(), ruleInf.rule.ID)
+                                        return
+                                }</span>
+                                <span class="cov8" title="1">klog.V(4).Infof("Adding object %v:%v to the event queue for the ADDED event", unstructuredObj.GetNamespace(), unstructuredObj.GetName())
+                                s.Queue.Add(&amp;eventqueue.Event{
+                                        EventType: rules.ADDED,
+                                        RuleID:    ruleInf.rule.ID,
+                                        Objects:   []*unstructured.Unstructured{unstructuredObj},
+                                })</span>
+                        }
+                }
+        }
+        <span class="cov8" title="1">klog.V(2).Infof("ADDED event type is not configured for rule %v", ruleInf.rule.ID)
+        return nil</span>
+}
+
+// updateFuncWrapper injects the rules into the update resource event handler
+// function without affecting its signature.
+// Makes event handler addition dynamic based on the rules by returning nil if
+// MODIFIED event type is not configured for a specific rule.
+// If the resource version of both new and old objects are same, the event
+// wont be processed.
+// Old object is stored as primary at index 0 and new object as secondary at index 1.
+func (s *Sensor) updateFuncWrapper(ruleInf *ruleInformer) func(obj interface{}, newObj interface{}) <span class="cov8" title="1">{
+        for _, t_eventType := range ruleInf.rule.EventTypes </span><span class="cov8" title="1">{
+                if t_eventType == rules.MODIFIED </span><span class="cov8" title="1">{
+                        return func(obj interface{}, newObj interface{}) </span><span class="cov8" title="1">{
+
+                                unstructuredObj := obj.(*unstructured.Unstructured)
+                                unstructuredNewObj := newObj.(*unstructured.Unstructured)
+
+                                if unstructuredNewObj.GetResourceVersion() == unstructuredObj.GetResourceVersion() </span><span class="cov0" title="0">{
+                                        klog.V(4).Infof("Actual update for object %s:%s was not detected", unstructuredObj.GetNamespace(), unstructuredObj.GetName())
+                                        return
+                                }</span>
+
+                                <span class="cov8" title="1">if len(ruleInf.rule.UpdatesOn) &gt; 0 </span><span class="cov8" title="1">{
+                                        klog.V(4).Infof("Event on object %s:%s is subjected to updates on filter", unstructuredObj.GetNamespace(), unstructuredObj.GetName())
+                                        enqueue := false
+                                        for _, updateOn := range ruleInf.rule.UpdatesOn </span><span class="cov8" title="1">{
+                                                updateOnStr := string(updateOn)
+                                                if !reflect.DeepEqual(unstructuredObj.Object[updateOnStr], unstructuredNewObj.Object[updateOnStr]) </span><span class="cov8" title="1">{
+                                                        enqueue = true
+                                                        break</span>
+                                                }
+                                        }
+                                        <span class="cov8" title="1">if !enqueue </span><span class="cov8" title="1">{
+                                                klog.V(4).Infof("Event on object %s:%s will not be processed since configured subset was not updated", unstructuredObj.GetNamespace(), unstructuredObj.GetName())
+                                                return
+                                        }</span>
+                                }
+
+                                <span class="cov8" title="1">klog.V(4).Infof("Adding object %v:%v to the event queue for the MODIFIED event", unstructuredObj.GetNamespace(), unstructuredObj.GetName())
+                                s.Queue.Add(&amp;eventqueue.Event{
+                                        EventType: rules.MODIFIED,
+                                        RuleID:    ruleInf.rule.ID,
+                                        Objects:   []*unstructured.Unstructured{unstructuredObj, unstructuredNewObj},
+                                })</span>
+                        }
+                }
+        }
+        <span class="cov8" title="1">klog.V(2).Infof("MODIFIED event type is not configured for rule %v", ruleInf.rule.ID)
+        return nil</span>
+}
+
+// deleteFuncWrapper injects the rules into the delete resource event handler
+// function without affecting its signature.
+// Makes event handler addition dynamic based on the rules by returning nil if
+// DELETED event type is not configured for a specific rule.
+func (s *Sensor) deleteFuncWrapper(ruleInf *ruleInformer) func(obj interface{}) <span class="cov8" title="1">{
+        for _, t_eventType := range ruleInf.rule.EventTypes </span><span class="cov8" title="1">{
+                if t_eventType == rules.DELETED </span><span class="cov8" title="1">{
+                        return func(obj interface{}) </span><span class="cov8" title="1">{
+                                unstructuredObj := obj.(*unstructured.Unstructured)
+                                klog.V(4).Infof("Adding object %v:%v to the event queue for the DELETED event", unstructuredObj.GetNamespace(), unstructuredObj.GetName())
+                                s.Queue.Add(&amp;eventqueue.Event{
+                                        EventType: rules.DELETED,
+                                        RuleID:    ruleInf.rule.ID,
+                                        Objects:   []*unstructured.Unstructured{unstructuredObj},
+                                })
+                        }</span>
+                }
+        }
+        <span class="cov8" title="1">klog.V(2).Infof("DELETED event type is not configured for rule %v", ruleInf.rule.ID)
+        return nil</span>
+}
+
+// ReloadRules will reload affected sensor rules without requiring a restart.
+// Thread safe by using mutex.
+// Finds out which of the rules are affected, and reloads only them.
+// Newly added rules which are not present in the old rules will be added.
+// Rules which are not present in the new rules will be removed.
+// For the rules which were updated, old informer will stopped and a new one
+// will be created with the new rule configuration.
+// If the sensor is not in a Running state, rules will not be reloaded.
+// ReloadRules assumes all rules are valid and are unique.
+func (s *Sensor) ReloadRules(sensorRules map[rules.RuleID]*rules.Rule) <span class="cov8" title="1">{
+        s.lock.Lock()
+        defer s.lock.Unlock()
+        klog.V(1).Infof("Reloading rules for sensor %v", s.SensorName)
+        if s.state != RUNNING </span><span class="cov0" title="0">{
+                klog.V(1).Info("Sensor is not running, skipping reloading rules")
+                return
+        }</span>
+        <span class="cov8" title="1">for newRuleId, newRule := range sensorRules </span><span class="cov8" title="1">{
+                if oldRuleInformer, ok := s.ruleInformers[newRuleId]; !ok </span><span class="cov8" title="1">{
+                        klog.V(2).Infof("Rule %v is not present in the old rules, adding it", newRuleId)
+                        ruleInf := s.registerInformerForRule(newRule)
+                        s.ruleInformers[newRuleId] = ruleInf
+                        ruleInf.startInformer()
+                }</span> else<span class="cov8" title="1"> {
+                        if !reflect.DeepEqual(oldRuleInformer.rule, newRule) </span><span class="cov8" title="1">{
+                                klog.V(2).Infof("Rule %v is present in the old rules, but the configuration is different, updating it", newRuleId)
+                                close(oldRuleInformer.stopChan)
+                                ruleInf := s.registerInformerForRule(newRule)
+                                s.ruleInformers[newRuleId] = ruleInf
+                                ruleInf.startInformer()
+                        }</span> else<span class="cov8" title="1"> {
+                                klog.V(2).Infof("Rule %s is not changed, skipping reloading", newRuleId)
+                        }</span>
+                }
+        }
+        <span class="cov8" title="1">for oldRuleId, oldRuleInformer := range s.ruleInformers </span><span class="cov8" title="1">{
+                if _, ok := sensorRules[oldRuleId]; !ok </span><span class="cov8" title="1">{
+                        klog.V(2).Infof("Rule %v is not present in the new rules, removing it", oldRuleId)
+                        close(oldRuleInformer.stopChan)
+                        delete(s.ruleInformers, oldRuleId)
+                }</span>
+        }
+}
+
+// registerInformerForRule creates a new informer for the provide rule.
+// Informers filters will be configured according to the rule.
+// Label rules with &lt;SensorName&gt;=ignore for the event to be ignored.
+// TODO: Add namespace wide ignore by adding &lt;SensorName&gt;=ignore to the
+//              namespace label.
+func (s *Sensor) registerInformerForRule(rule *rules.Rule) *ruleInformer <span class="cov8" title="1">{
+        dynamicInformer := dynamicinformer.NewFilteredDynamicInformer(
+                s.dynamicClientSet,
+                rule.GroupVersionResource,
+                metav1.NamespaceAll,
+                0,
+                cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc},
+                dynamicinformer.TweakListOptionsFunc(func(options *metav1.ListOptions) </span><span class="cov8" title="1">{
+                        labelSeclector := fmt.Sprintf("%s!=ignore", s.SensorName)
+                        if rule.LabelFilter != "" </span><span class="cov0" title="0">{
+                                labelSeclector += "," + rule.LabelFilter
+                        }</span>
+                        <span class="cov8" title="1">options.LabelSelector = labelSeclector
+                        options.FieldSelector = rule.FieldFilter</span>
+                }))
+
+        <span class="cov8" title="1">klog.V(1).Infof("Registering event handler for rule %v", rule.ID)
+
+        ruleStopChan := make(chan struct{})
+        ruleInformer := &amp;ruleInformer{
+                rule:              rule,
+                informer:          dynamicInformer,
+                stopChan:          ruleStopChan,
+                informerStartTime: time.Now().Local(),
+        }
+
+        dynamicInformer.Informer().AddEventHandler(cache.FilteringResourceEventHandler{
+                FilterFunc: func(obj interface{}) bool </span><span class="cov8" title="1">{
+                        meta, ok := obj.(metav1.Object)
+                        klog.V(4).Infof("FilterFunc called for rule %v with object %v:%v", rule.ID, meta.GetNamespace(), meta.GetName())
+                        if !ok </span><span class="cov0" title="0">{
+                                return false
+                        }</span>
+                        <span class="cov8" title="1">if len(rule.Namespaces) != 0 &amp;&amp; !utils.StringInSlice(meta.GetNamespace(), rule.Namespaces) </span><span class="cov8" title="1">{
+                                klog.V(4).Infof("FilterFunc: Namespace %v is not in the list of namespaces %v for object %v:%v", meta.GetNamespace(), rule.Namespaces, meta.GetNamespace(), meta.GetName())
+                                return false
+                        }</span>
+                        <span class="cov8" title="1">return true</span>
+                },
+                Handler: cache.ResourceEventHandlerFuncs{
+                        AddFunc:    s.addFuncWrapper(ruleInformer),
+                        UpdateFunc: s.updateFuncWrapper(ruleInformer),
+                        DeleteFunc: s.deleteFuncWrapper(ruleInformer),
+                },
+        })
+        <span class="cov8" title="1">klog.V(2).Infof("Registered Informers for rule %v", rule.ID)
+        return ruleInformer</span>
+}
+
+// Start starts the sensor. It will start all informers which will register event handlers
+// and filters based on the rules.
+// Start assumes rules are valid and unique.
+// Start is a blocking call, it will block until the sensor is stopped.
+func (s *Sensor) Start(sensorRules map[rules.RuleID]*rules.Rule) <span class="cov8" title="1">{
+        klog.V(1).Info("Starting sensor")
+        s.state = STARTING
+        for ruleID, rule := range sensorRules </span><span class="cov8" title="1">{
+                ruleInformer := s.registerInformerForRule(rule)
+                ruleInformer.startInformer()
+                s.ruleInformers[ruleID] = ruleInformer
+        }</span>
+        <span class="cov8" title="1">s.state = RUNNING
+        &lt;-s.stopChan</span>
+}
+
+// StartSensorAndWorkerPool will start the sensor and the worker pool.
+// Worker pool which is part of the eventqueue module will consume events from the queue.
+func (s *Sensor) StartSensorAndWorkerPool(sensorRules map[rules.RuleID]*rules.Rule) <span class="cov8" title="1">{
+        go s.Start(sensorRules)
+        go s.Queue.StartQueueWorkerPool()
+        &lt;-s.stopChan
+}</span>
+
+// Stop stops the sensor. It will stop all informers which will unregister all
+// event handlers.
+// Stop will block until all informers are stopped.
+func (s *Sensor) Stop() <span class="cov8" title="1">{
+        s.state = STOPPING
+        klog.V(1).Info("Stopping sensor")
+        for _, ruleInf := range s.ruleInformers </span><span class="cov8" title="1">{
+                close(ruleInf.stopChan)
+        }</span>
+        <span class="cov8" title="1">close(s.stopChan)
+        klog.V(1).Info("Stopped all informers, draining queue")
+        s.Queue.ShutDownWithDrain()
+        s.state = STOPPED</span>
+}
+
+// SensorRuntime sets up the sensor runtime and manages it.
+// TODO: Rework cancelFunc in rule collectors
+type SensorRuntime struct {
+        sensor        *Sensor
+        ruleCollector *collector.ConfigMapRuleCollector
+        cancelFunc    context.CancelFunc
+}
+
+func (sr *SensorRuntime) GetSensorState() SensorState <span class="cov8" title="1">{
+        klog.V(3).Infof("Current sensor state: %v", sr.sensor.state)
+        return sr.sensor.state
+}</span>
+
+// SetupSensorRuntime will setup the sensor and return a sensor runtime.
+// SetupSensor will collect the required KubeConfig and initialize the sensor
+// to be able to start.
+func SetupNewSensorRuntime(sensorConfig *config.Config) (*SensorRuntime, error) <span class="cov8" title="1">{
+        kubeConfig, err := utils.GetKubeAPIConfig(sensorConfig.KubeConfigPath)
+        if err != nil </span><span class="cov0" title="0">{
+                klog.V(2).ErrorS(err, "Error when try to create kube config")
+                return nil, err
+        }</span>
+        <span class="cov8" title="1">kubeClient, err := kubernetes.NewForConfig(kubeConfig)
+        if err != nil </span><span class="cov0" title="0">{
+                klog.V(2).ErrorS(err, "Error when try to create kube client")
+                return nil, err
+        }</span>
+        <span class="cov8" title="1">ruleCollector := collector.NewConfigMapRuleCollector(kubeClient, sensorConfig.SensorNamespace, sensorConfig.SensorRuleConfigMapLabel)
+        executor, err := executor.New(
+                executor.ExecutorType(sensorConfig.ExecutorType),
+                executor.ExecutorOpts{
+                        ScriptDir:    sensorConfig.ScriptDir,
+                        ScriptPrefix: sensorConfig.ScriptPrefix,
+                        AuthType:     client.AuthType(sensorConfig.AuthType),
+                        EventsRunnerClientOpts: client.EventsRunnerClientOpts{
+                                EventsRunnerBaseURL: sensorConfig.EventsRunnerBaseURL,
+                                CaCertPath:          sensorConfig.CaCertPath,
+                                ClientCertPath:      sensorConfig.ClientCertPath,
+                                ClientKeyPath:       sensorConfig.ClientKeyPath,
+                                JWTToken:            sensorConfig.JWTToken,
+                                RequestTimeout:      sensorConfig.RequestTimeout,
+                        },
+                },
+        )
+        if err != nil </span><span class="cov0" title="0">{
+                klog.V(2).ErrorS(err, "Error when try to create executor")
+                return nil, err
+        }</span>
+        <span class="cov8" title="1">sensor := New(&amp;SensorOpts{
+                KubeConfig: kubeConfig,
+                SensorName: sensorConfig.SensorName,
+                EventQueueOpts: eventqueue.EventQueueOpts{
+                        WorkerCount:  sensorConfig.WorkerCount,
+                        MaxTryCount:  sensorConfig.MaxTryCount,
+                        RequeueDelay: sensorConfig.RequeueDelay,
+                },
+        }, executor)
+        return &amp;SensorRuntime{
+                sensor:        sensor,
+                ruleCollector: ruleCollector,
+                cancelFunc:    nil,
+        }, nil</span>
+}
+
+// StartSensorRuntime will start the sensor and rule collectors.
+// Rules will be automatically reloaded if any rules changes were detected.
+// StartSensor will collect initial rules for the sensor.
+// StartSensor will block until the sensor runtime is stopped using
+// StopSensor method.
+func (sr *SensorRuntime) StartSensorRuntime() error <span class="cov8" title="1">{
+        ctx, cancelFunc := context.WithCancel(context.Background())
+        sr.cancelFunc = cancelFunc
+        sensorRules, err := sr.ruleCollector.Collect(ctx)
+        if err != nil </span><span class="cov0" title="0">{
+                klog.V(2).ErrorS(err, "Error when try to collect rules")
+                return err
+        }</span>
+        <span class="cov8" title="1">wg := sync.WaitGroup{}
+        wg.Add(2)
+        go func() </span><span class="cov8" title="1">{
+                wg.Done()
+                sr.sensor.StartSensorAndWorkerPool(sensorRules)
+        }</span>()
+        <span class="cov8" title="1">go func() </span><span class="cov8" title="1">{
+                wg.Done()
+                sr.ruleCollector.StartRuleCollector(ctx, sr.sensor)
+        }</span>()
+        <span class="cov8" title="1">wg.Wait()
+        return nil</span>
+}
+
+// StopSensorRuntime stops sensor and rule collectors gracefully.
+// StopSensor will drain the Queue to make sure collected events
+// are processed and then it will stop the workers.
+func (sr *SensorRuntime) StopSensorRuntime() <span class="cov8" title="1">{
+        sr.cancelFunc()
+        sr.sensor.Stop()
+}</span>
+
+// StopOnSignal is a helper around StopSensor method to stop
+// the sensor and related listeners on SIGINT or SIGTERM signals.
+// Utilizes the StopSensor method which will stop all components
+// gracefully.
+func (sr *SensorRuntime) StopOnSignal() <span class="cov0" title="0">{
+        klog.V(1).Info("Listening for SIGINT/SIGTERM")
+        signalChan := make(chan os.Signal, 1)
+        signal.Notify(signalChan, syscall.SIGINT, syscall.SIGTERM)
+        &lt;-signalChan
+        klog.V(1).Info("Received an interrupt, stopping sensor")
+        sr.StopSensorRuntime()
+        klog.V(1).Info("Sensor stopped")
+}</span>
+</pre>
+		
+		<pre class="file" id="file7" style="display: none">package utils
+
+import (
+        "reflect"
+
+        "k8s.io/client-go/rest"
+        "k8s.io/client-go/tools/clientcmd"
+        "k8s.io/client-go/util/homedir"
+        "k8s.io/klog/v2"
+)
+
+// GetKubeAPIConfig returns a Kubernetes API config.
+// Common abstraction to get config in both incluster and out cluster
+// scenarios.
+func GetKubeAPIConfig(kubeConfigPath string) (*rest.Config, error) <span class="cov8" title="1">{
+        if kubeConfigPath == "" </span><span class="cov8" title="1">{
+                klog.V(3).Info("Provided KubeConfig path is empty. Getting config from home")
+                if home := homedir.HomeDir(); home != "" </span><span class="cov8" title="1">{
+                        kubeConfigPath = home + "/.kube/config"
+                }</span>
+        }
+        <span class="cov8" title="1">return clientcmd.BuildConfigFromFlags("", kubeConfigPath)</span>
+}
+
+// GetKubeAPIConfigOrDie wrapper around GetKubeAPIConfig.
+// Panics if unable to load config.
+func GetKubeAPIConfigOrDie(kubeConfigPath string) *rest.Config <span class="cov0" title="0">{
+        config, err := GetKubeAPIConfig(kubeConfigPath)
+        if err != nil </span><span class="cov0" title="0">{
+                panic(err)</span>
+        }
+        <span class="cov0" title="0">return config</span>
+}
+
+// StringInSlice returns true if the string is in the slice.
+func StringInSlice(a string, list []string) bool <span class="cov8" title="1">{
+        for _, b := range list </span><span class="cov8" title="1">{
+                if b == a </span><span class="cov8" title="1">{
+                        return true
+                }</span>
+        }
+        <span class="cov8" title="1">return false</span>
+}
+
+// IsZero checks if the provided value is its zero value
+func IsZero(value interface{}) bool <span class="cov8" title="1">{
+        return value == nil || reflect.DeepEqual(value, reflect.Zero(reflect.TypeOf(value)).Interface())
+}</span>
+
+// FindZeroValue finds the 1st zero value in the map.
+func FindZeroValue(values map[string]interface{}) string <span class="cov8" title="1">{
+        for k, v := range values </span><span class="cov8" title="1">{
+                if IsZero(v) </span><span class="cov8" title="1">{
+                        return k
+                }</span>
+        }
+        <span class="cov8" title="1">return ""</span>
+}
+</pre>
+		
+		</div>
+	</body>
+	<script>
+	(function() {
+		var files = document.getElementById('files');
+		var visible;
+		files.addEventListener('change', onChange, false);
+		function select(part) {
+			if (visible)
+				visible.style.display = 'none';
+			visible = document.getElementById(part);
+			if (!visible)
+				return;
+			files.value = part;
+			visible.style.display = 'block';
+			location.hash = part;
+		}
+		function onChange() {
+			select(files.value);
+			window.scrollTo(0, 0);
+		}
+		if (location.hash != "") {
+			select(location.hash.substr(1));
+		}
+		if (!visible) {
+			select("file0");
+		}
+	})();
+	</script>
+</html>
