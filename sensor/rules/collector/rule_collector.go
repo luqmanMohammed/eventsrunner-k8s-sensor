@@ -116,7 +116,7 @@ func (cmrc ConfigMapRuleCollector) StartRuleCollector(ctx context.Context, senso
 		return cmList
 	}
 
-	klog.V(1).Info("Configuring continuos rule collector")
+	klog.V(1).Info("Configuring continuous rule collector")
 	changeQueue := make(chan struct{}, 10)
 	informerFactory := informers.NewSharedInformerFactoryWithOptions(cmrc.clientSet, 0, informers.WithNamespace(cmrc.sensorNamespace), informers.WithTweakListOptions(func(lo *metav1.ListOptions) {
 		lo.LabelSelector = cmrc.sensorRuleConfigMapLabel
@@ -132,7 +132,7 @@ func (cmrc ConfigMapRuleCollector) StartRuleCollector(ctx context.Context, senso
 			changeQueue <- struct{}{}
 		},
 	})
-	klog.V(1).Info("Starting continuos rule collector")
+	klog.V(1).Info("Starting continuous rule collector")
 	go informerFactory.Start(ctx.Done())
 	if !cache.WaitForCacheSync(ctx.Done(), informerFactory.Core().V1().ConfigMaps().Informer().HasSynced) {
 		klog.V(2).ErrorS(errors.New("ConfigMap Cache Wait Failed"), "")

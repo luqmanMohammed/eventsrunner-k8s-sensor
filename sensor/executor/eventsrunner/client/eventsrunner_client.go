@@ -56,7 +56,7 @@ type EventsRunnerClient struct {
 // createTLSConfig creates a TLS config based on the provided CA cert path,
 // client key path and client cert path.
 // If Client parameters are empty, only CA will be used to create the TLS
-// config, which is usefull for HTTPS JWT Authentication
+// config, which is useful for HTTPS JWT Authentication
 func createTLSConfig(caCertPath, clientKeyPath, clientCertPath string) (*tls.Config, error) {
 	klog.V(2).Infof("Reading CA cert from %s", caCertPath)
 	caCert, err := ioutil.ReadFile(caCertPath)

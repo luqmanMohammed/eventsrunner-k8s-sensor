@@ -53,7 +53,7 @@ func New(scriptDir, scriptPrefix string) (*Executor, error) {
 
 // Execute executes the script for the given event.
 // Execute function will construct the script path and execute it.
-// The relevent event information will be passed to the script as
+// The relevant event information will be passed to the script as
 // an base64 encoded JSON string in the form of an environment variable
 // with the name EVENT.
 // Execute will return errors if the script is not an executable or if
