@@ -11,7 +11,6 @@ import (
 )
 
 // Event struct holds all information related to an event.
-// TODO: Add json tags to the struct.
 type Event struct {
 	EventType rules.EventType              `json:"eventType"`
 	RuleID    rules.RuleID                 `json:"ruleID"`
@@ -19,18 +18,10 @@ type Event struct {
 	tries     int                          `json:"-"`
 }
 
-// QueueItemExecutor all queue executors must implement this interface.
+// QueueExecutor all queue executors must implement this interface.
 // Execute method will be called for each item in the queue.
 type QueueExecutor interface {
 	Execute(event *Event) error
-}
-
-// MockQueueExecutor is a mock implementation of QueueExecutor interface.
-// It is used for testing or as a placeholder.
-type MockQueueExecutor struct{}
-
-func (*MockQueueExecutor) Execute(event *Event) error {
-	return nil
 }
 
 // EventQueue wraps around the workqueue.DelayingInterface and provides
@@ -44,18 +35,18 @@ type EventQueue struct {
 	executor     QueueExecutor
 }
 
-// EventQueueOpts holds the configuration options for the EventQueue.
+// Opts holds the configuration options for the EventQueue.
 // WorkerCount is the number of workers to start.
 // MaxTryCount is the maximum number of times an item will be retried.
 // RequeueDelay is the delay in seconds before an item is retried.
-type EventQueueOpts struct {
+type Opts struct {
 	WorkerCount  int
 	MaxTryCount  int
 	RequeueDelay time.Duration
 }
 
-// Creates a New EventQueue and returns the pointer to it.
-func New(executor QueueExecutor, queueOpts EventQueueOpts) *EventQueue {
+// New creates a New EventQueue and returns the pointer to it.
+func New(executor QueueExecutor, queueOpts Opts) *EventQueue {
 	eq := &EventQueue{
 		DelayingInterface: workqueue.NewDelayingQueue(),
 		workerCount:       queueOpts.WorkerCount,

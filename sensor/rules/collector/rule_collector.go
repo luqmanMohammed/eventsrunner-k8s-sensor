@@ -77,8 +77,8 @@ func (cmrc ConfigMapRuleCollector) parseCollectedConfigMapsIntoRules(cmList []v1
 			klog.V(2).Infof("Collected configmap %v, doesn't contain 'rules' key. Skipping", cm.Name)
 			continue
 		}
-		if errJsonUnMarshal := json.Unmarshal([]byte(rulesStr), &tmpRules); errJsonUnMarshal != nil {
-			klog.V(2).ErrorS(errJsonUnMarshal, fmt.Sprintf("JSON error when decoding content of configmap %v. Skipping", cm.Name))
+		if errJSONUnMarshal := json.Unmarshal([]byte(rulesStr), &tmpRules); errJSONUnMarshal != nil {
+			klog.V(2).ErrorS(errJSONUnMarshal, fmt.Sprintf("JSON error when decoding content of configmap %v. Skipping", cm.Name))
 			continue
 		}
 		for _, rule := range tmpRules {
@@ -115,6 +115,7 @@ func (cmrc ConfigMapRuleCollector) StartRuleCollector(ctx context.Context, senso
 		}
 		return cmList
 	}
+
 	klog.V(1).Info("Configuring continuos rule collector")
 	changeQueue := make(chan struct{}, 10)
 	informerFactory := informers.NewSharedInformerFactoryWithOptions(cmrc.clientSet, 0, informers.WithNamespace(cmrc.sensorNamespace), informers.WithTweakListOptions(func(lo *metav1.ListOptions) {
@@ -140,7 +141,6 @@ func (cmrc ConfigMapRuleCollector) StartRuleCollector(ctx context.Context, senso
 		select {
 		case <-ctx.Done():
 			klog.V(1).Info("Stopping rule collector")
-			close(changeQueue)
 			return
 		case <-changeQueue:
 			klog.V(2).Info("Rule change detected. Parsing and reloading rules")

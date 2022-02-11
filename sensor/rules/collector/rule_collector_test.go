@@ -117,10 +117,9 @@ func TestContinuosRuleCollection(t *testing.T) {
 			}
 			if retryCount >= retry {
 				return false
-			} else {
-				retryCount++
-				time.Sleep(1 * time.Second)
 			}
+			retryCount++
+			time.Sleep(1 * time.Second)
 		}
 	}
 	addRuleConfigMap("basic-rules", exampleBasicRuleStr)

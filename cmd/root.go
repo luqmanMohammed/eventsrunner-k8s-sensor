@@ -1,3 +1,4 @@
+// Package cmd is the root command for the eventsrunner-k8s-sensor application.
 /*
 Copyright © 2021 Luqman Mohammed m.luqman077@gmail.com
 

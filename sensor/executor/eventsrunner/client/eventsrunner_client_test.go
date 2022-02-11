@@ -18,7 +18,7 @@ import (
 )
 
 var (
-	test_event = &eventqueue.Event{
+	testEvent = &eventqueue.Event{
 		EventType: rules.ADDED,
 		RuleID:    "test-rule",
 		Objects: []*unstructured.Unstructured{
@@ -34,7 +34,7 @@ var (
 		},
 	}
 
-	test_ca_pki_cert_script = `#!/bin/bash
+	testCaPKICertScript = `#!/bin/bash
 set -xe
 mkdir -p /tmp/test-pki
 
@@ -86,7 +86,7 @@ openssl x509 -req -in  /tmp/test-pki/client.csr -CA /tmp/test-pki/ca.crt -CAkey 
 
 func setupTLS() error {
 	if _, err := os.Stat("/tmp/test-pki"); os.IsNotExist(err) {
-		cmd := exec.Command("sh", "-c", test_ca_pki_cert_script)
+		cmd := exec.Command("sh", "-c", testCaPKICertScript)
 		file, err := os.OpenFile(os.DevNull, os.O_RDWR, os.ModeAppend)
 		if err != nil {
 			return err
@@ -142,7 +142,7 @@ func TestMutualTLSAuthProcessEvent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create MutualTLS client due to: %v", err)
 	}
-	if err = erClient.ProcessEvent(test_event); err != nil {
+	if err = erClient.ProcessEvent(testEvent); err != nil {
 		t.Fatalf("Failed to process event due to: %v", err)
 	}
 }
@@ -176,7 +176,7 @@ func TestJWTAuthProcessEvent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create JWT client due to: %v", err)
 	}
-	if err = erClient.ProcessEvent(test_event); err != nil {
+	if err = erClient.ProcessEvent(testEvent); err != nil {
 		t.Fatalf("Failed to process event due to: %v", err)
 	}
 }

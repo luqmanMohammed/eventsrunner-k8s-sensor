@@ -28,13 +28,17 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// SensorState type depicts the state of the sensor.
-type SensorState int
+// State type depicts the state of the sensor.
+type State int
 
 const (
-	STARTING SensorState = iota
+	//STARTING is the state when the sensor is starting.
+	STARTING State = iota
+	//RUNNING is the state when the sensor is running.
 	RUNNING
+	//STOPPING is the state when the sensor is stopping.
 	STOPPING
+	//STOPPED is the state when the sensor is stopped.
 	STOPPED
 )
 
@@ -56,43 +60,43 @@ func (rr *ruleInformer) startInformer() {
 	go rr.informer.Informer().Run(rr.stopChan)
 }
 
-// SensorOpts holds options related to sensor configuration
+// Opts holds options related to sensor configuration
 // - KubConfig : kubernetes config
 // - EventQueueOpts : event queue options. Refer eventqueue.EventQueueOpts
 // - SensorName: name of the sensor
-type SensorOpts struct {
-	eventqueue.EventQueueOpts
-	KubeConfig *rest.Config
-	SensorName string
+type Opts struct {
+	eventqueueOpts eventqueue.Opts
+	KubeConfig     *rest.Config
+	SensorName     string
 }
 
 // Sensor struct implements kubernetes informers to sense changes
 // according to the rules defined.
 // Responsible for managing all informers and event queue
 type Sensor struct {
-	*SensorOpts
+	*Opts
 	dynamicClientSet dynamic.Interface
 	Queue            *eventqueue.EventQueue
 	ruleInformers    map[rules.RuleID]*ruleInformer
 	stopChan         chan struct{}
-	state            SensorState
+	state            State
 	lock             sync.Mutex
 }
 
-// Creates a new default Sensor. Refer Sensor struct documentation for
+// New creates a new default Sensor. Refer Sensor struct documentation for
 // more information.
 // SensorOpts is required.
-func New(sensorOpts *SensorOpts, executor eventqueue.QueueExecutor) *Sensor {
+func New(sensorOpts *Opts, executor eventqueue.QueueExecutor) *Sensor {
 	if sensorOpts == nil {
 		panic("SensorOpts cannot be nil")
 	}
 	dynamicClientSet := dynamic.NewForConfigOrDie(sensorOpts.KubeConfig)
 	return &Sensor{
-		SensorOpts:       sensorOpts,
+		Opts:             sensorOpts,
 		dynamicClientSet: dynamicClientSet,
 		ruleInformers:    make(map[rules.RuleID]*ruleInformer),
 		stopChan:         make(chan struct{}),
-		Queue:            eventqueue.New(executor, sensorOpts.EventQueueOpts),
+		Queue:            eventqueue.New(executor, sensorOpts.eventqueueOpts),
 	}
 }
 
@@ -103,8 +107,8 @@ func New(sensorOpts *SensorOpts, executor eventqueue.QueueExecutor) *Sensor {
 // If the objects where created before the start of the rule, the event wont be
 // processed.
 func (s *Sensor) addFuncWrapper(ruleInf *ruleInformer) func(obj interface{}) {
-	for _, t_eventType := range ruleInf.rule.EventTypes {
-		if t_eventType == rules.ADDED {
+	for _, tEventType := range ruleInf.rule.EventTypes {
+		if tEventType == rules.ADDED {
 			return func(obj interface{}) {
 				unstructuredObj := obj.(*unstructured.Unstructured)
 				if !unstructuredObj.GetCreationTimestamp().After(ruleInf.informerStartTime) {
@@ -132,8 +136,8 @@ func (s *Sensor) addFuncWrapper(ruleInf *ruleInformer) func(obj interface{}) {
 // wont be processed.
 // Old object is stored as primary at index 0 and new object as secondary at index 1.
 func (s *Sensor) updateFuncWrapper(ruleInf *ruleInformer) func(obj interface{}, newObj interface{}) {
-	for _, t_eventType := range ruleInf.rule.EventTypes {
-		if t_eventType == rules.MODIFIED {
+	for _, tEventType := range ruleInf.rule.EventTypes {
+		if tEventType == rules.MODIFIED {
 			return func(obj interface{}, newObj interface{}) {
 
 				unstructuredObj := obj.(*unstructured.Unstructured)
@@ -178,8 +182,8 @@ func (s *Sensor) updateFuncWrapper(ruleInf *ruleInformer) func(obj interface{}, 
 // Makes event handler addition dynamic based on the rules by returning nil if
 // DELETED event type is not configured for a specific rule.
 func (s *Sensor) deleteFuncWrapper(ruleInf *ruleInformer) func(obj interface{}) {
-	for _, t_eventType := range ruleInf.rule.EventTypes {
-		if t_eventType == rules.DELETED {
+	for _, tEventType := range ruleInf.rule.EventTypes {
+		if tEventType == rules.DELETED {
 			return func(obj interface{}) {
 				unstructuredObj := obj.(*unstructured.Unstructured)
 				klog.V(4).Infof("Adding object %v:%v to the event queue for the DELETED event", unstructuredObj.GetNamespace(), unstructuredObj.GetName())
@@ -212,29 +216,29 @@ func (s *Sensor) ReloadRules(sensorRules map[rules.RuleID]*rules.Rule) {
 		klog.V(1).Info("Sensor is not running, skipping reloading rules")
 		return
 	}
-	for newRuleId, newRule := range sensorRules {
-		if oldRuleInformer, ok := s.ruleInformers[newRuleId]; !ok {
-			klog.V(2).Infof("Rule %v is not present in the old rules, adding it", newRuleId)
+	for newRuleID, newRule := range sensorRules {
+		if oldRuleInformer, ok := s.ruleInformers[newRuleID]; !ok {
+			klog.V(2).Infof("Rule %v is not present in the old rules, adding it", newRuleID)
 			ruleInf := s.registerInformerForRule(newRule)
-			s.ruleInformers[newRuleId] = ruleInf
+			s.ruleInformers[newRuleID] = ruleInf
 			ruleInf.startInformer()
 		} else {
 			if !reflect.DeepEqual(oldRuleInformer.rule, newRule) {
-				klog.V(2).Infof("Rule %v is present in the old rules, but the configuration is different, updating it", newRuleId)
+				klog.V(2).Infof("Rule %v is present in the old rules, but the configuration is different, updating it", newRuleID)
 				close(oldRuleInformer.stopChan)
 				ruleInf := s.registerInformerForRule(newRule)
-				s.ruleInformers[newRuleId] = ruleInf
+				s.ruleInformers[newRuleID] = ruleInf
 				ruleInf.startInformer()
 			} else {
-				klog.V(2).Infof("Rule %s is not changed, skipping reloading", newRuleId)
+				klog.V(2).Infof("Rule %s is not changed, skipping reloading", newRuleID)
 			}
 		}
 	}
-	for oldRuleId, oldRuleInformer := range s.ruleInformers {
-		if _, ok := sensorRules[oldRuleId]; !ok {
-			klog.V(2).Infof("Rule %v is not present in the new rules, removing it", oldRuleId)
+	for oldRuleID, oldRuleInformer := range s.ruleInformers {
+		if _, ok := sensorRules[oldRuleID]; !ok {
+			klog.V(2).Infof("Rule %v is not present in the new rules, removing it", oldRuleID)
 			close(oldRuleInformer.stopChan)
-			delete(s.ruleInformers, oldRuleId)
+			delete(s.ruleInformers, oldRuleID)
 		}
 	}
 }
@@ -332,23 +336,24 @@ func (s *Sensor) Stop() {
 	s.state = STOPPED
 }
 
-// SensorRuntime sets up the sensor runtime and manages it.
+// Runtime sets up the sensor runtime and manages it.
 // TODO: Rework cancelFunc in rule collectors
-type SensorRuntime struct {
+type Runtime struct {
 	sensor        *Sensor
 	ruleCollector *collector.ConfigMapRuleCollector
 	cancelFunc    context.CancelFunc
 }
 
-func (sr *SensorRuntime) GetSensorState() SensorState {
+// GetSensorState returns the current state of the sensor.
+func (sr *Runtime) GetSensorState() State {
 	klog.V(3).Infof("Current sensor state: %v", sr.sensor.state)
 	return sr.sensor.state
 }
 
-// SetupSensorRuntime will setup the sensor and return a sensor runtime.
+// SetupNewSensorRuntime will setup the sensor and return a sensor runtime.
 // SetupSensor will collect the required KubeConfig and initialize the sensor
 // to be able to start.
-func SetupNewSensorRuntime(sensorConfig *config.Config) (*SensorRuntime, error) {
+func SetupNewSensorRuntime(sensorConfig *config.Config) (*Runtime, error) {
 	kubeConfig, err := utils.GetKubeAPIConfig(sensorConfig.KubeConfigPath)
 	if err != nil {
 		klog.V(2).ErrorS(err, "Error when try to create kube config")
@@ -361,8 +366,8 @@ func SetupNewSensorRuntime(sensorConfig *config.Config) (*SensorRuntime, error) 
 	}
 	ruleCollector := collector.NewConfigMapRuleCollector(kubeClient, sensorConfig.SensorNamespace, sensorConfig.SensorRuleConfigMapLabel)
 	executor, err := executor.New(
-		executor.ExecutorType(sensorConfig.ExecutorType),
-		executor.ExecutorOpts{
+		executor.Type(sensorConfig.ExecutorType),
+		executor.Opts{
 			ScriptDir:    sensorConfig.ScriptDir,
 			ScriptPrefix: sensorConfig.ScriptPrefix,
 			AuthType:     client.AuthType(sensorConfig.AuthType),
@@ -380,16 +385,16 @@ func SetupNewSensorRuntime(sensorConfig *config.Config) (*SensorRuntime, error) 
 		klog.V(2).ErrorS(err, "Error when try to create executor")
 		return nil, err
 	}
-	sensor := New(&SensorOpts{
+	sensor := New(&Opts{
 		KubeConfig: kubeConfig,
 		SensorName: sensorConfig.SensorName,
-		EventQueueOpts: eventqueue.EventQueueOpts{
+		eventqueueOpts: eventqueue.Opts{
 			WorkerCount:  sensorConfig.WorkerCount,
 			MaxTryCount:  sensorConfig.MaxTryCount,
 			RequeueDelay: sensorConfig.RequeueDelay,
 		},
 	}, executor)
-	return &SensorRuntime{
+	return &Runtime{
 		sensor:        sensor,
 		ruleCollector: ruleCollector,
 		cancelFunc:    nil,
@@ -401,7 +406,7 @@ func SetupNewSensorRuntime(sensorConfig *config.Config) (*SensorRuntime, error) 
 // StartSensor will collect initial rules for the sensor.
 // StartSensor will block until the sensor runtime is stopped using
 // StopSensor method.
-func (sr *SensorRuntime) StartSensorRuntime() error {
+func (sr *Runtime) StartSensorRuntime() error {
 	ctx, cancelFunc := context.WithCancel(context.Background())
 	sr.cancelFunc = cancelFunc
 	sensorRules, err := sr.ruleCollector.Collect(ctx)
@@ -426,7 +431,7 @@ func (sr *SensorRuntime) StartSensorRuntime() error {
 // StopSensorRuntime stops sensor and rule collectors gracefully.
 // StopSensor will drain the Queue to make sure collected events
 // are processed and then it will stop the workers.
-func (sr *SensorRuntime) StopSensorRuntime() {
+func (sr *Runtime) StopSensorRuntime() {
 	sr.cancelFunc()
 	sr.sensor.Stop()
 }
@@ -435,7 +440,7 @@ func (sr *SensorRuntime) StopSensorRuntime() {
 // the sensor and related listeners on SIGINT or SIGTERM signals.
 // Utilizes the StopSensor method which will stop all components
 // gracefully.
-func (sr *SensorRuntime) StopOnSignal() {
+func (sr *Runtime) StopOnSignal() {
 	klog.V(1).Info("Listening for SIGINT/SIGTERM")
 	signalChan := make(chan os.Signal, 1)
 	signal.Notify(signalChan, syscall.SIGINT, syscall.SIGTERM)

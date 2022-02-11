@@ -21,8 +21,10 @@ import (
 type AuthType string
 
 const (
+	// mTLS is the authentication type for mutual TLS authentication
 	mTLS AuthType = "mTLS"
-	JWT  AuthType = "jwt"
+	// JWT is the authentication type for JWT authentication
+	JWT AuthType = "jwt"
 )
 
 // EventsRunnerClientOpts is a struct that contains the options for the EventsRunnerClient
@@ -200,13 +202,13 @@ func New(authType AuthType, erClientOpts *EventsRunnerClientOpts) (*EventsRunner
 // Requests will be sent to "<base url>/api/v1/events".
 func (er EventsRunnerClient) ProcessEvent(event *eventqueue.Event) error {
 	klog.V(3).Infof("Processing event with rule ID: %s", event.RuleID)
-	eventJson, err := json.Marshal(event)
+	eventJSON, err := json.Marshal(event)
 	if err != nil {
 		klog.V(3).ErrorS(err, "Failed to marshal event")
 		return err
 	}
 	requestURI := fmt.Sprintf("%s/api/v1/events", er.eventsRunnerBaseURL)
-	req, err := http.NewRequest("POST", requestURI, bytes.NewBuffer(eventJson))
+	req, err := http.NewRequest("POST", requestURI, bytes.NewBuffer(eventJSON))
 	if err != nil {
 		klog.V(3).ErrorS(err, "Failed to create request")
 		return err

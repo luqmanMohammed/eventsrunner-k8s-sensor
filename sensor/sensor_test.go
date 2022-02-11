@@ -28,7 +28,7 @@ import (
 )
 
 var (
-	rules_basic = map[rules.RuleID]*rules.Rule{
+	rulesBasic = map[rules.RuleID]*rules.Rule{
 		"test-rule-1": {
 			ID: "test-rule-1",
 			GroupVersionResource: schema.GroupVersionResource{
@@ -40,7 +40,7 @@ var (
 			Namespaces: []string{"default"},
 		},
 	}
-	rules_pre_reload = map[rules.RuleID]*rules.Rule{
+	rulesPreReload = map[rules.RuleID]*rules.Rule{
 		"test-rule-0": {
 			ID: "test-rule-0",
 			GroupVersionResource: schema.GroupVersionResource{
@@ -69,7 +69,7 @@ var (
 			EventTypes: []rules.EventType{rules.ADDED},
 		},
 	}
-	rules_reload = map[rules.RuleID]*rules.Rule{
+	rulesReload = map[rules.RuleID]*rules.Rule{
 		"test-rule-0": {
 			ID: "test-rule-0",
 			GroupVersionResource: schema.GroupVersionResource{
@@ -99,7 +99,7 @@ var (
 			Namespaces: []string{"default"},
 		},
 	}
-	rules_custom = map[rules.RuleID]*rules.Rule{
+	rulesCustom = map[rules.RuleID]*rules.Rule{
 		"test-rule-1": {
 			ID: "test-rule-1",
 			GroupVersionResource: schema.GroupVersionResource{
@@ -111,7 +111,7 @@ var (
 			EventTypes: []rules.EventType{rules.ADDED, rules.MODIFIED},
 		},
 	}
-	rules_clusterbound = map[rules.RuleID]*rules.Rule{
+	rulesClusterbound = map[rules.RuleID]*rules.Rule{
 		"test-rule-1": {
 			ID: "test-rule-1",
 			GroupVersionResource: schema.GroupVersionResource{
@@ -122,7 +122,7 @@ var (
 			EventTypes: []rules.EventType{rules.ADDED, rules.MODIFIED, rules.DELETED},
 		},
 	}
-	rules_cache = map[rules.RuleID]*rules.Rule{
+	rulesCache = map[rules.RuleID]*rules.Rule{
 		"test-rule-1": {
 			ID: "test-rule-1",
 			GroupVersionResource: schema.GroupVersionResource{
@@ -133,7 +133,7 @@ var (
 			EventTypes: []rules.EventType{rules.ADDED},
 		},
 	}
-	rules_dynamic = map[rules.RuleID]*rules.Rule{
+	rulesDynamic = map[rules.RuleID]*rules.Rule{
 		"test-rule-1": {
 			GroupVersionResource: schema.GroupVersionResource{
 				Group:    "",
@@ -143,7 +143,7 @@ var (
 			EventTypes: []rules.EventType{rules.MODIFIED},
 		},
 	}
-	rules_object_subset = map[rules.RuleID]*rules.Rule{
+	rulesObjectSubset = map[rules.RuleID]*rules.Rule{
 		"test-rule-1": {
 			GroupVersionResource: schema.GroupVersionResource{
 				Group:    "",
@@ -196,7 +196,7 @@ func waitStartSensor(t *testing.T, sensor *Sensor, ruleSet map[rules.RuleID]*rul
 
 func setupSensor() *Sensor {
 	config := utils.GetKubeAPIConfigOrDie("")
-	sensor := New(&SensorOpts{
+	sensor := New(&Opts{
 		KubeConfig: config,
 		SensorName: "k8s",
 	}, &executor.LogExecutor{})
@@ -229,16 +229,15 @@ func checkIfObjectExistsInQueue(retry int, sensor *Sensor, searchObject metav1.O
 		}
 		if retryCount == retry {
 			return errTimeout
-		} else {
-			retryCount++
-			time.Sleep(1 * time.Second)
 		}
+		retryCount++
+		time.Sleep(1 * time.Second)
 	}
 }
 
 func TestSensorStart(t *testing.T) {
 	sensor := setupSensor()
-	go sensor.Start(rules_basic)
+	go sensor.Start(rulesBasic)
 	defer sensor.Stop()
 	time.Sleep(3 * time.Second)
 	if len(sensor.ruleInformers) != 1 {
@@ -248,20 +247,20 @@ func TestSensorStart(t *testing.T) {
 
 func TestSensorReload(t *testing.T) {
 	sensor := setupSensor()
-	go sensor.Start(rules_pre_reload)
-	waitStartSensor(t, sensor, rules_pre_reload, 10)
+	go sensor.Start(rulesPreReload)
+	waitStartSensor(t, sensor, rulesPreReload, 10)
 
-	for ruleID := range rules_pre_reload {
+	for ruleID := range rulesPreReload {
 		if _, ok := sensor.ruleInformers[ruleID]; !ok {
 			t.Errorf("Rule %s should be added", ruleID)
 		}
 	}
 
 	rule1StartTime := sensor.ruleInformers["test-rule-0"].informerStartTime
-	sensor.ReloadRules(rules_reload)
-	waitStartSensor(t, sensor, rules_reload, 10)
+	sensor.ReloadRules(rulesReload)
+	waitStartSensor(t, sensor, rulesReload, 10)
 
-	if len(rules_reload) != len(sensor.ruleInformers) {
+	if len(rulesReload) != len(sensor.ruleInformers) {
 		t.Error("Rules not reloaded properly")
 	}
 	if _, ok := sensor.ruleInformers["test-rule-2"]; ok {
@@ -334,9 +333,9 @@ func TestSensorReload(t *testing.T) {
 
 func TestObjectsCreatedBeforeSensorStartAreNotAdded(t *testing.T) {
 	sensor := setupSensor()
-	go sensor.Start(rules_cache)
+	go sensor.Start(rulesCache)
 	defer sensor.Stop()
-	waitStartSensor(t, sensor, rules_cache, 10)
+	waitStartSensor(t, sensor, rulesCache, 10)
 
 	// Create a pod
 	pod := &v1.Pod{
@@ -395,8 +394,8 @@ func TestSensorIsWorkingWithCRDs(t *testing.T) {
 
 	time.Sleep(3 * time.Second)
 
-	go sensor.Start(rules_custom)
-	waitStartSensor(t, sensor, rules_custom, 10)
+	go sensor.Start(rulesCustom)
+	waitStartSensor(t, sensor, rulesCustom, 10)
 
 	crdGVR := schema.GroupVersionResource{
 		Group:    "k8ser.io",
@@ -442,8 +441,8 @@ func TestSensorIsWorkingWithCRDs(t *testing.T) {
 
 func TestSensorWorkingWithClusterBoundResources(t *testing.T) {
 	sensor := setupSensor()
-	go sensor.Start(rules_clusterbound)
-	waitStartSensor(t, sensor, rules_clusterbound, 10)
+	go sensor.Start(rulesClusterbound)
+	waitStartSensor(t, sensor, rulesClusterbound, 10)
 	fmt.Println("came")
 	ns := &v1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
@@ -469,8 +468,8 @@ func TestSensorWorkingWithClusterBoundResources(t *testing.T) {
 
 func TestOnlyConfiguredEventListenerIsAdded(t *testing.T) {
 	sensor := setupSensor()
-	go sensor.Start(rules_dynamic)
-	waitStartSensor(t, sensor, rules_dynamic, 10)
+	go sensor.Start(rulesDynamic)
+	waitStartSensor(t, sensor, rulesDynamic, 10)
 
 	ns := &v1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
@@ -508,8 +507,8 @@ func TestOnlyConfiguredEventListenerIsAdded(t *testing.T) {
 
 func TestEnqueueOnlyOnSpecificK8sObjSubsetUpdate(t *testing.T) {
 	sensor := setupSensor()
-	go sensor.Start(rules_object_subset)
-	waitStartSensor(t, sensor, rules_object_subset, 10)
+	go sensor.Start(rulesObjectSubset)
+	waitStartSensor(t, sensor, rulesObjectSubset, 10)
 
 	ns := &v1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
@@ -605,17 +604,17 @@ func (mqe *mockQueueExecutor) Execute(event *eventqueue.Event) error {
 func TestWorkerPoolIntegration(t *testing.T) {
 	config := utils.GetKubeAPIConfigOrDie("")
 	mockExec := &mockQueueExecutor{}
-	sensor := New(&SensorOpts{
+	sensor := New(&Opts{
 		KubeConfig: config,
 		SensorName: "k8s",
-		EventQueueOpts: eventqueue.EventQueueOpts{
+		eventqueueOpts: eventqueue.Opts{
 			WorkerCount:  1,
 			MaxTryCount:  5,
 			RequeueDelay: time.Second * 1,
 		},
 	}, mockExec)
-	go sensor.StartSensorAndWorkerPool(rules_basic)
-	waitStartSensor(t, sensor, rules_basic, 10)
+	go sensor.StartSensorAndWorkerPool(rulesBasic)
+	waitStartSensor(t, sensor, rulesBasic, 10)
 
 	// make sure the sensor dint process any old objects
 	for i := 0; i < 5; i++ {
