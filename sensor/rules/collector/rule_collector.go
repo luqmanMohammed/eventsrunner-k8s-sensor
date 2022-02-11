@@ -115,8 +115,10 @@ func (cmrc ConfigMapRuleCollector) StartRuleCollector(ctx context.Context, senso
 		}
 		return cmList
 	}
+
 	klog.V(1).Info("Configuring continuos rule collector")
 	changeQueue := make(chan struct{}, 10)
+	defer close(changeQueue)
 	informerFactory := informers.NewSharedInformerFactoryWithOptions(cmrc.clientSet, 0, informers.WithNamespace(cmrc.sensorNamespace), informers.WithTweakListOptions(func(lo *metav1.ListOptions) {
 		lo.LabelSelector = cmrc.sensorRuleConfigMapLabel
 	}))
@@ -140,7 +142,6 @@ func (cmrc ConfigMapRuleCollector) StartRuleCollector(ctx context.Context, senso
 		select {
 		case <-ctx.Done():
 			klog.V(1).Info("Stopping rule collector")
-			close(changeQueue)
 			return
 		case <-changeQueue:
 			klog.V(2).Info("Rule change detected. Parsing and reloading rules")
