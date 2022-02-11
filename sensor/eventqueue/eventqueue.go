@@ -11,7 +11,6 @@ import (
 )
 
 // Event struct holds all information related to an event.
-// TODO: Add json tags to the struct.
 type Event struct {
 	EventType rules.EventType              `json:"eventType"`
 	RuleID    rules.RuleID                 `json:"ruleID"`

@@ -65,9 +65,9 @@ func (rr *ruleInformer) startInformer() {
 // - EventQueueOpts : event queue options. Refer eventqueue.EventQueueOpts
 // - SensorName: name of the sensor
 type Opts struct {
-	eventqueue.Opts
-	KubeConfig *rest.Config
-	SensorName string
+	eventqueueOpts eventqueue.Opts
+	KubeConfig     *rest.Config
+	SensorName     string
 }
 
 // Sensor struct implements kubernetes informers to sense changes
@@ -96,7 +96,7 @@ func New(sensorOpts *Opts, executor eventqueue.QueueExecutor) *Sensor {
 		dynamicClientSet: dynamicClientSet,
 		ruleInformers:    make(map[rules.RuleID]*ruleInformer),
 		stopChan:         make(chan struct{}),
-		Queue:            eventqueue.New(executor, sensorOpts.Opts),
+		Queue:            eventqueue.New(executor, sensorOpts.eventqueueOpts),
 	}
 }
 
@@ -388,7 +388,7 @@ func SetupNewSensorRuntime(sensorConfig *config.Config) (*Runtime, error) {
 	sensor := New(&Opts{
 		KubeConfig: kubeConfig,
 		SensorName: sensorConfig.SensorName,
-		Opts: eventqueue.Opts{
+		eventqueueOpts: eventqueue.Opts{
 			WorkerCount:  sensorConfig.WorkerCount,
 			MaxTryCount:  sensorConfig.MaxTryCount,
 			RequeueDelay: sensorConfig.RequeueDelay,

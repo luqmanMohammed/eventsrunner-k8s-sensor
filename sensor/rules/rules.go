@@ -9,7 +9,7 @@ const (
 	MODIFIED EventType = "modified"
 	// DELETED is the event type for modified events
 	DELETED EventType = "deleted"
-	// NONE is the event type for none events
+	// NONE is the event type for null events
 	NONE EventType = "none"
 )
 

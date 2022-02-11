@@ -607,7 +607,7 @@ func TestWorkerPoolIntegration(t *testing.T) {
 	sensor := New(&Opts{
 		KubeConfig: config,
 		SensorName: "k8s",
-		Opts: eventqueue.Opts{
+		eventqueueOpts: eventqueue.Opts{
 			WorkerCount:  1,
 			MaxTryCount:  5,
 			RequeueDelay: time.Second * 1,
