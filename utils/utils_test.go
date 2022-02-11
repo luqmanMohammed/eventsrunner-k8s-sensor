@@ -4,7 +4,7 @@ import "testing"
 
 func TestGetKubeAPIConfig(t *testing.T) {
 	//Test if config is correctly taken from default location
-	//Assumes that the test environment has kubeconfig at $HOME/.kube/config
+	//Assumes that the test environment has kubeConfig at $HOME/.kube/config
 	if config, err := GetKubeAPIConfig(""); err != nil {
 		t.Error("Expected to get cluster config from default location")
 	} else if config == nil {
@@ -22,25 +22,25 @@ func TestStringInSlice(t *testing.T) {
 }
 
 func TestZeroValueFunction(t *testing.T) {
-	test_str := ""
-	test_int := 0
+	testStr := ""
+	testInt := 0
 
-	if !IsZero(test_str) {
+	if !IsZero(testStr) {
 		t.Error("Expected to be zero value true")
 	}
-	if !IsZero(test_int) {
+	if !IsZero(testInt) {
 		t.Error("Expected to be zero value true")
 	}
 }
 
 // TestFindZeroValue tests if FindZeroValue returns the correct key
 func TestFindZeroValue(t *testing.T) {
-	test_map := map[string]interface{}{"a": 1, "b": 2, "c": 3}
-	if key := FindZeroValue(test_map); key != "" {
+	testMap := map[string]interface{}{"a": 1, "b": 2, "c": 3}
+	if key := FindZeroValue(testMap); key != "" {
 		t.Errorf("Expected to not find zero value in map, got %s", key)
 	}
-	test_map["a"] = 0
-	if key := FindZeroValue(test_map); key != "a" {
+	testMap["a"] = 0
+	if key := FindZeroValue(testMap); key != "a" {
 		t.Errorf("Expected to find zero value in map, got %s", key)
 	}
 }

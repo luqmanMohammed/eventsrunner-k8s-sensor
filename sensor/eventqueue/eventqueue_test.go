@@ -10,7 +10,7 @@ import (
 )
 
 var (
-	queueOpts = EventQueueOpts{
+	queueOpts = Opts{
 		WorkerCount:  1,
 		MaxTryCount:  3,
 		RequeueDelay: 100 * time.Millisecond,

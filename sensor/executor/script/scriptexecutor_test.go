@@ -10,7 +10,7 @@ import (
 )
 
 var (
-	test_event = &eventqueue.Event{
+	testEvent = &eventqueue.Event{
 		EventType: rules.ADDED,
 		RuleID:    "test-rule",
 		Objects: []*unstructured.Unstructured{
@@ -26,7 +26,7 @@ var (
 		},
 	}
 
-	test_script = `#!/bin/bash
+	testScript = `#!/bin/bash
 
 # Check if EVENT environment variable is set
 if [ -z "$EVENT" ]; then
@@ -56,7 +56,7 @@ func TestScriptExecutor(t *testing.T) {
 	if err = f.Chmod(0777); err != nil {
 		t.Fatalf("Failed to chmod test script: %v", err)
 	}
-	_, err = f.Write([]byte(test_script))
+	_, err = f.Write([]byte(testScript))
 	if err != nil {
 		t.Fatalf("Failed to write test script: %v", err)
 	}
@@ -72,7 +72,7 @@ func TestScriptExecutor(t *testing.T) {
 
 	t.Run("should execute script", func(t *testing.T) {
 		se, _ := New("/tmp", "script")
-		event := test_event
+		event := testEvent
 		err = se.Execute(event)
 		if err != nil {
 			t.Errorf("unexpected error: %s", err)

@@ -77,8 +77,8 @@ func (cmrc ConfigMapRuleCollector) parseCollectedConfigMapsIntoRules(cmList []v1
 			klog.V(2).Infof("Collected configmap %v, doesn't contain 'rules' key. Skipping", cm.Name)
 			continue
 		}
-		if errJsonUnMarshal := json.Unmarshal([]byte(rulesStr), &tmpRules); errJsonUnMarshal != nil {
-			klog.V(2).ErrorS(errJsonUnMarshal, fmt.Sprintf("JSON error when decoding content of configmap %v. Skipping", cm.Name))
+		if errJSONUnMarshal := json.Unmarshal([]byte(rulesStr), &tmpRules); errJSONUnMarshal != nil {
+			klog.V(2).ErrorS(errJSONUnMarshal, fmt.Sprintf("JSON error when decoding content of configmap %v. Skipping", cm.Name))
 			continue
 		}
 		for _, rule := range tmpRules {

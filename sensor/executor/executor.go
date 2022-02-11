@@ -17,14 +17,18 @@ type Executor interface {
 }
 
 const (
-	SCRIPT ExecutorType = "script"
-	ER     ExecutorType = "eventsrunner"
-	LOG    ExecutorType = "log"
+	// SCRIPT is the type of the script executor.
+	SCRIPT Type = "script"
+	// ER is the type of the eventsrunner executor.
+	ER Type = "eventsrunner"
+	// LOG is the type of the log executor.
+	LOG Type = "log"
 )
 
-type ExecutorType string
+// Type is the type of the executor.
+type Type string
 
-// ExecutorOpts contains options for creating any type of executor.
+// Opts contains options for creating any type of executor.
 // New method will error out if a required config is not provided for
 // the specific executor.
 // - ScriptDir: Directory where the scripts are located.
@@ -32,7 +36,7 @@ type ExecutorType string
 // - AuthType: Type of authentication to be used for eventsrunner client auth.
 // - EventsRunnerClientOpts: Options for creating eventsrunner client. Refer to
 // the eventsrunner client package for more details.
-type ExecutorOpts struct {
+type Opts struct {
 	ScriptDir    string
 	ScriptPrefix string
 	AuthType     client.AuthType
@@ -47,7 +51,7 @@ type ExecutorOpts struct {
 // - log
 // If the a required config is not provided for the specific executor,
 // New method will error out.
-func New(exType ExecutorType, exOpts ExecutorOpts) (Executor, error) {
+func New(exType Type, exOpts Opts) (Executor, error) {
 	klog.V(1).Infof("Creating new executor of type: %s", exType)
 	switch exType {
 	case SCRIPT:
@@ -65,6 +69,7 @@ func New(exType ExecutorType, exOpts ExecutorOpts) (Executor, error) {
 // Compatible with the Executor Interface
 type LogExecutor struct{}
 
+// Execute logs the event.
 func (le *LogExecutor) Execute(event *eventqueue.Event) error {
 	klog.V(3).Infof("Executing log executor for rule: %s", event.RuleID)
 	return nil

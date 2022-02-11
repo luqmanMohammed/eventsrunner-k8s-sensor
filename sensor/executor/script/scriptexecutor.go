@@ -20,7 +20,7 @@ var (
 	ErrFileIsNotExecutable = errors.New("file is not executable")
 )
 
-// ScriptExecutor is an implementation of QueueExecutor interface in the
+// Executor is an implementation of QueueExecutor interface in the
 // eventqueue package.
 // Script executor will execute configured scripts according to the event
 // received from the event queue.
@@ -31,21 +31,21 @@ var (
 // run it, since the sensor does not do any kind of verification.
 // Implemented as a Proof of Concept. Passing on the event to eventsrunner
 // will be more scalable, easier to maintain and secure.
-type ScriptExecutor struct {
+type Executor struct {
 	scriptDir    string
 	scriptPrefix string
 }
 
-// NewScriptExecutor creates a new instance of ScriptExecutor.
+// New creates a new instance of script based Executor.
 // ScriptDir and ScriptPrefix are configs are required.
-func New(scriptDir, scriptPrefix string) (*ScriptExecutor, error) {
+func New(scriptDir, scriptPrefix string) (*Executor, error) {
 	if err := config.AnyRequestedConfigMissing(map[string]interface{}{
 		"ScriptDir":    scriptDir,
 		"ScriptPrefix": scriptPrefix,
 	}); err != nil {
 		return nil, err
 	}
-	return &ScriptExecutor{
+	return &Executor{
 		scriptDir:    scriptDir,
 		scriptPrefix: scriptPrefix,
 	}, nil
@@ -60,7 +60,7 @@ func New(scriptDir, scriptPrefix string) (*ScriptExecutor, error) {
 // the script is invalid.
 // OS STDOUT and STDERR will be used for the script.
 // TODO: Add file STDOUT and STDERR for scripts
-func (se *ScriptExecutor) Execute(event *eventqueue.Event) error {
+func (se *Executor) Execute(event *eventqueue.Event) error {
 	script := fmt.Sprintf("%s/%s-%s.sh", se.scriptDir, se.scriptPrefix, event.RuleID)
 	klog.V(2).Infof("Executing script %s", script)
 	if fileInfo, err := os.Stat(script); err != nil {
@@ -70,14 +70,14 @@ func (se *ScriptExecutor) Execute(event *eventqueue.Event) error {
 	} else if fileInfo.Mode()&0111 == 0 {
 		return ErrFileIsNotExecutable
 	}
-	eventJson, err := json.Marshal(event)
+	eventJSON, err := json.Marshal(event)
 	if err != nil {
 		return err
 	}
-	encodedEventJson := base64.StdEncoding.EncodeToString(eventJson)
+	encodedEventJSON := base64.StdEncoding.EncodeToString(eventJSON)
 	cmd := exec.Command(script)
 	env := os.Environ()
-	env = append(env, fmt.Sprintf("EVENT=%s", encodedEventJson))
+	env = append(env, fmt.Sprintf("EVENT=%s", encodedEventJSON))
 	cmd.Env = env
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
