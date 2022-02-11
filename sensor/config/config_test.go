@@ -72,7 +72,7 @@ func TestAnyRequestedConfigMissingFunc(t *testing.T) {
 
 	testMap2 := map[string]interface{}{
 		"test1": 0,
-		"test2": "",
+		"test2": "came",
 	}
 	if err := AnyRequestedConfigMissing(testMap2); err == nil {
 		t.Fatalf("Expected error checking for missing config")
