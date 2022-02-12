@@ -67,6 +67,6 @@ func Execute() {
 }
 
 func init() {
-	rootCmd.PersistentFlags().StringVarP(&cfgPath, "config", "", "c", "config file (default is $HOME/.er-k8s-sensor/config.yaml)")
+	rootCmd.PersistentFlags().StringVarP(&cfgPath, "config", "c", "", "config file (default is $HOME/.er-k8s-sensor/config.yaml)")
 	rootCmd.PersistentFlags().IntVarP(&logVerbosity, "verbosity", "v", 0, "log verbosity")
 }
