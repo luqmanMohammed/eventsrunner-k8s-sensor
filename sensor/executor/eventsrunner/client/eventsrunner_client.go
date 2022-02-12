@@ -216,7 +216,7 @@ func (er EventsRunnerClient) ProcessEvent(event *eventqueue.Event) error {
 	for k, v := range er.headers {
 		req.Header.Set(k, v)
 	}
-	klog.V(3).Infof("Sending request to %s for event with rule ID %s", requestURI, event.RuleID)
+	klog.V(3).Infof("Sending request to %s for event with rule ID 	%s", requestURI, event.RuleID)
 	resp, err := er.httpClient.Do(req)
 	if err != nil {
 		klog.V(3).ErrorS(err, "Failed to send request")
