@@ -28,12 +28,25 @@ import (
 	"k8s.io/klog/v2"
 )
 
+//InvalidSensorStateError is an error that is returned when the sensor state is not valid.
+type InvalidSensorStateError struct {
+	state         State
+	requiredAnyOf []State
+}
+
+// Error implements error interface.
+func (isse *InvalidSensorStateError) Error() string {
+	return fmt.Sprintf("Invalid sensor state: %v, required any of: %v", isse.state, isse.requiredAnyOf)
+}
+
 // State type depicts the state of the sensor.
 type State int
 
 const (
+	// INIT is the initial state of the sensor.
+	INIT State = iota
 	//STARTING is the state when the sensor is starting.
-	STARTING State = iota
+	STARTING
 	//RUNNING is the state when the sensor is running.
 	RUNNING
 	//STOPPING is the state when the sensor is stopping.
@@ -80,7 +93,7 @@ type Sensor struct {
 	ruleInformers    map[rules.RuleID]*ruleInformer
 	stopChan         chan struct{}
 	state            State
-	lock             sync.Mutex
+	sensorLock       sync.RWMutex
 }
 
 // New creates a new default Sensor. Refer Sensor struct documentation for
@@ -96,8 +109,16 @@ func New(sensorOpts *Opts, executor eventqueue.QueueExecutor) *Sensor {
 		dynamicClientSet: dynamicClientSet,
 		ruleInformers:    make(map[rules.RuleID]*ruleInformer),
 		stopChan:         make(chan struct{}),
+		state:            INIT,
 		Queue:            eventqueue.New(executor, sensorOpts.eventqueueOpts),
 	}
+}
+
+// GetSensorState returns the current state of the sensor.
+func (s *Sensor) GetSensorState() State {
+	s.sensorLock.RLock()
+	defer s.sensorLock.RUnlock()
+	return s.state
 }
 
 // addFuncWrapper injects the rules into the add resource event handler
@@ -209,8 +230,8 @@ func (s *Sensor) deleteFuncWrapper(ruleInf *ruleInformer) func(obj interface{}) 
 // If the sensor is not in a Running state, rules will not be reloaded.
 // ReloadRules assumes all rules are valid and are unique.
 func (s *Sensor) ReloadRules(sensorRules map[rules.RuleID]*rules.Rule) {
-	s.lock.Lock()
-	defer s.lock.Unlock()
+	s.sensorLock.Lock()
+	defer s.sensorLock.Unlock()
 	klog.V(1).Infof("Reloading rules for sensor %v", s.SensorName)
 	if s.state != RUNNING {
 		klog.V(1).Info("Sensor is not running, skipping reloading rules")
@@ -301,7 +322,13 @@ func (s *Sensor) registerInformerForRule(rule *rules.Rule) *ruleInformer {
 // and filters based on the rules.
 // Start assumes rules are valid and unique.
 // Start is a blocking call, it will block until the sensor is stopped.
-func (s *Sensor) Start(sensorRules map[rules.RuleID]*rules.Rule) {
+func (s *Sensor) Start(sensorRules map[rules.RuleID]*rules.Rule) error {
+	s.sensorLock.Lock()
+	if s.state != INIT && s.state != STOPPED {
+		err := &InvalidSensorStateError{s.state, []State{INIT, STOPPED}}
+		klog.V(1).ErrorS(err, "Unable to start sensor")
+		return err
+	}
 	klog.V(1).Info("Starting sensor")
 	s.state = STARTING
 	for ruleID, rule := range sensorRules {
@@ -310,7 +337,9 @@ func (s *Sensor) Start(sensorRules map[rules.RuleID]*rules.Rule) {
 		s.ruleInformers[ruleID] = ruleInformer
 	}
 	s.state = RUNNING
+	s.sensorLock.Unlock()
 	<-s.stopChan
+	return nil
 }
 
 // StartSensorAndWorkerPool will start the sensor and the worker pool.
@@ -324,7 +353,14 @@ func (s *Sensor) StartSensorAndWorkerPool(sensorRules map[rules.RuleID]*rules.Ru
 // Stop stops the sensor. It will stop all informers which will unregister all
 // event handlers.
 // Stop will block until all informers are stopped.
-func (s *Sensor) Stop() {
+func (s *Sensor) Stop() error {
+	s.sensorLock.Lock()
+	defer s.sensorLock.Unlock()
+	if s.state != RUNNING {
+		err := &InvalidSensorStateError{s.state, []State{RUNNING}}
+		klog.V(1).ErrorS(err, "Unable to stop sensor")
+		return err
+	}
 	s.state = STOPPING
 	klog.V(1).Info("Stopping sensor")
 	for _, ruleInf := range s.ruleInformers {
@@ -334,6 +370,7 @@ func (s *Sensor) Stop() {
 	klog.V(1).Info("Stopped all informers, draining queue")
 	s.Queue.ShutDownWithDrain()
 	s.state = STOPPED
+	return nil
 }
 
 // Runtime sets up the sensor runtime and manages it.
@@ -342,12 +379,6 @@ type Runtime struct {
 	sensor        *Sensor
 	ruleCollector *collector.ConfigMapRuleCollector
 	cancelFunc    context.CancelFunc
-}
-
-// GetSensorState returns the current state of the sensor.
-func (sr *Runtime) GetSensorState() State {
-	klog.V(3).Infof("Current sensor state: %v", sr.sensor.state)
-	return sr.sensor.state
 }
 
 // SetupNewSensorRuntime will setup the sensor and return a sensor runtime.

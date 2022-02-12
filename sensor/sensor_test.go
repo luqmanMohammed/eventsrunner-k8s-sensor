@@ -811,7 +811,7 @@ func TestSensorTotalIntegration(t *testing.T) {
 	// Make sure sensor is running before continuing
 	// Try 2 seconds to check if the sensor is running
 	if !retryFunc(func() bool {
-		return sensorRuntime.GetSensorState() == RUNNING
+		return sensorRuntime.sensor.GetSensorState() == RUNNING
 	}, 2) {
 		t.Fatal("Sensor is not running")
 	}
