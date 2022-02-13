@@ -62,7 +62,7 @@ func New(scriptDir, scriptPrefix string) (*Executor, error) {
 // TODO: Add file STDOUT and STDERR for scripts
 func (se *Executor) Execute(event *eventqueue.Event) error {
 	script := fmt.Sprintf("%s/%s-%s.sh", se.scriptDir, se.scriptPrefix, event.RuleID)
-	klog.V(2).Infof("Executing script %s", script)
+	klog.V(2).Infof("Executing script %s for ruleID %s", script, event.RuleID)
 	if fileInfo, err := os.Stat(script); err != nil {
 		return err
 	} else if fileInfo.IsDir() {
@@ -81,5 +81,10 @@ func (se *Executor) Execute(event *eventqueue.Event) error {
 	cmd.Env = env
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	return cmd.Run()
+	if err := cmd.Run(); err != nil {
+		klog.V(2).ErrorS(err, fmt.Sprintf("Failed to execute script %s for rule %s", script, event.RuleID))
+		return err
+	}
+	klog.V(2).Infof("Successfully executed script %s for rule %s", script, event.RuleID)
+	return nil
 }
