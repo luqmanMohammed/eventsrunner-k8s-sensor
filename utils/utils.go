@@ -19,7 +19,11 @@ func GetKubeAPIConfig(kubeConfigPath string) (*rest.Config, error) {
 			kubeConfigPath = home + "/.kube/config"
 		}
 	}
-	return clientcmd.BuildConfigFromFlags("", kubeConfigPath)
+	clientConfig, err := clientcmd.BuildConfigFromFlags("", kubeConfigPath)
+	if err != nil {
+		return clientcmd.BuildConfigFromFlags("", "")
+	}
+	return clientConfig, nil
 }
 
 // GetKubeAPIConfigOrDie wrapper around GetKubeAPIConfig.
