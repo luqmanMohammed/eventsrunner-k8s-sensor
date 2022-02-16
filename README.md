@@ -45,13 +45,13 @@ SensorRuleConfigMapLabel|string|Label to identify Rules configmaps in the Sensor
 WorkerCount|int|Number of workers to be started to process items in the queue|10
 MaxTryCount|int|Number of times failed events executions should be retried|5
 RequeueDelay|time|Time to wait before requeuing a failed event|30s
-ExecutorType|string|Type of executor to be used to process events in the queue. Valid options are log| script
-ScriptDir|string|If script executor is used| Absolute path to the location of the scripts
-ScriptPrefix|string|If script executor is used| Prefix that all scripts should have
-AuthType|string|If eventsrunner executor is used| Type of authentication to use when connecting to the Events Runner server
-EventsRunnerBaseURL|string|If eventsrunner executor is used| URL of the Events Runner server
-RequestTimeout|time|If eventsrunner executor is used| Request timeout to be configured when calling Events Runner server
-CaCertPath|string|If eventsrunner executor is used and auth type mTLS and/or HTTPS endpoint is used| Absolute path to the CA cert
-JWTToken|string|If eventsrunner executor is used and auth type JWT is used| JWT token to be added in the authorization header
-ClientCertPath|string|If eventsrunner executor is used and auth type mTLS  is used| Absolute path to the client cert
-ClientKeyPath|string|If eventsrunner executor is used and auth type mTLS is used| Absolute path to the client key
+ExecutorType|string|Type of executor to be used to process events in the queue. Valid options are `log`, `script` or `eventsrunner`|log
+ScriptDir|string|If script executor is used, Absolute path to the location of the scripts|None
+ScriptPrefix|string|If script executor is used, Prefix that all scripts should have|None
+AuthType|string|If eventsrunner executor is used, Type of authentication to use when connecting to the Events Runner server. Valid options are `jwt` or `mTLS`|None
+EventsRunnerBaseURL|string|If eventsrunner executor is used, URL of the Events Runner server|None
+RequestTimeout|time|If eventsrunner executor is used, Request timeout to be configured when calling Events Runner server|None
+CaCertPath|string|If eventsrunner executor is used and auth type mTLS and/or HTTPS endpoint is used, Absolute path to the CA cert|None
+JWTToken|string|If eventsrunner executor is used and auth type JWT is used, JWT token to be added in the authorization header|None
+ClientCertPath|string|If eventsrunner executor is used and auth type mTLS  is used, Absolute path to the client cert|None
+ClientKeyPath|string|If eventsrunner executor is used and auth type mTLS is used, Absolute path to the client key|None
