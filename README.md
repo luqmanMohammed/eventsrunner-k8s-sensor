@@ -38,7 +38,7 @@ Configs used by the sensor are:
 **Key**|**Type**|**Description**|**Default**
 :-----:|:-----:|:-----:|:-----:
 LogVerbosity|int|Log verbosity to be used|None
-SensorName|string|Name of the sensor| used to ignore specific objects from being processed by labeling them with <SensorName>=ignore|er-k8s-sensor
+SensorName|string|Name of the sensor, used to ignore specific objects from being processed by labeling them with `<SensorName>=ignore`|er-k8s-sensor
 KubeConfigPath|string|Absolute path to Kubernetes config|$HOME/.kube
 SensorNamespace|string|Rules will be collected from this namespace|eventsrunner
 SensorRuleConfigMapLabel|string|Label to identify Rules configmaps in the SensorNamespace|er-k8s-sensor-rules=true
