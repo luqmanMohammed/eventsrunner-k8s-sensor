@@ -16,6 +16,9 @@ import (
 	"k8s.io/klog/v2"
 )
 
+// TODO: Use a rulecollector interface
+// TODO: Add support for collecting rules from files
+
 // SensorReloadInterface should be implemented by sensors which needs to
 // support automatic reloading of rules.
 type SensorReloadInterface interface {

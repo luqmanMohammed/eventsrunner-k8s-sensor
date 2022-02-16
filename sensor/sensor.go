@@ -86,6 +86,8 @@ type Opts struct {
 // Sensor struct implements kubernetes informers to sense changes
 // according to the rules defined.
 // Responsible for managing all informers and event queue
+// TODO: Add support for leader elect between a group of sensors with
+//       the same name.
 type Sensor struct {
 	*Opts
 	dynamicClientSet dynamic.Interface
@@ -156,6 +158,7 @@ func (s *Sensor) addFuncWrapper(ruleInf *ruleInformer) func(obj interface{}) {
 // If the resource version of both new and old objects are same, the event
 // wont be processed.
 // Old object is stored as primary at index 0 and new object as secondary at index 1.
+// TODO: Add more in depth checks for updatesOn filter
 func (s *Sensor) updateFuncWrapper(ruleInf *ruleInformer) func(obj interface{}, newObj interface{}) {
 	for _, tEventType := range ruleInf.rule.EventTypes {
 		if tEventType == rules.MODIFIED {

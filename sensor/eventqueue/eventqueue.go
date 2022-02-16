@@ -27,6 +27,7 @@ type QueueExecutor interface {
 // EventQueue wraps around the workqueue.DelayingInterface and provides
 // additional functionality.
 // Adds functionality to process and retry items if failed.
+// TODO: Add persistence of the queue. Currently queue is lost in case of crash.
 type EventQueue struct {
 	workqueue.DelayingInterface
 	workerCount  int
