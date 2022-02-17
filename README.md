@@ -13,13 +13,13 @@ Config driven sensor for Kubernetes events.
 - [3. Configuration](#3-configuration)
   - [3.1. Sensor configuration](#31-sensor-configuration)
   - [3.2. Rules](#32-rules)
-    - [3.2.1 Rule collection from ConfigMaps](#321-rule-collection-from-configmaps)
+    - [3.2.1. Rule collection from ConfigMaps](#321-rule-collection-from-configmaps)
 - [4. Executor (Processor/Action)](#4-executor-processoraction)
-  - [4.1 log executor](#41-log-executor)
-  - [4.2 script executor](#42-script-executor)
-  - [4.3 eventsrunner executor](#43-eventsrunner-executor)
-    - [4.3.1 mTLS authentication](#431-mtls-authentication)
-    - [4.3.2 JWT authentication](#432-jwt-authentication)
+  - [4.1. log executor](#41-log-executor)
+  - [4.2. script executor](#42-script-executor)
+  - [4.3. eventsrunner executor](#43-eventsrunner-executor)
+    - [4.3.1. mTLS authentication](#431-mtls-authentication)
+    - [4.3.2. JWT authentication](#432-jwt-authentication)
 - [5. License](#5-license)
 
 ---
@@ -107,7 +107,7 @@ Rules are defined in the JSON format.
 - fieldFilter (Optional): Filter to be applied on the field. If empty, no filter will be applied. All valid kubernetes field selectors are supported. Above example shows that sensor will consider the event if the `metadata.name` field is `test`.
 - labelFilter (Optional): Filter to be applied on the label. If empty, no filter will be applied. All valid kubernetes label selectors are supported. Above example shows that sensor will consider the event if the `testKey` label is present and the value is `testValue`.
 
-#### 3.2.1 Rule collection from ConfigMaps
+#### 3.2.1. Rule collection from ConfigMaps
 Kubernetes Sensor supports loading rules from ConfigMaps. ConfigMaps in the `SensorNamespace` ([configurable](#31-sensor-configuration)) with the label `SensorRuleConfigMapLabel` ([configurable](#31-sensor-configuration)) will be considered as rules ConfigMaps. Rule ConfigMap's data field should have the key `rules` and the value should be a JSON array of rules JSON objects as depicted above. Sensor will automatically reload the affected rules if any of the rule ConfigMaps are updated.
 
 ---
@@ -132,10 +132,10 @@ Executor is the component that will be used to process the events. Event structu
     - MODIFIED: pre-update object will be stored at index 0 and post-update object at index 1.
     - DELETED: object that was deleted
 
-### 4.1 log executor
+### 4.1. log executor
 Log executor/action is the simplest executor which would log the rule's id. Intended to be used for debugging/testing/poc purposes.
 
-### 4.2 script executor
+### 4.2. script executor
 > :warning: Scripts executed by the sensor should be vetted before allowing the sensor to run it.
 
 > Required Configs: `ScriptDir` and `ScriptPrefix`
@@ -143,7 +143,7 @@ Log executor/action is the simplest executor which would log the rule's id. Inte
 
 Script executor can be used to execute a script on the event inside the sensor environment. Scripts should be located in the `ScriptDir` ([configurable](#31-sensor-configuration)) directory. Scripts should have the following naming convention: `<ScriptPrefix>-<Rule.ID>.sh`. If the script is not valid or not executable the execution would return an error. Relevant event is passed to the script as an environment variable named `EVENT` which would be a base64 encoded JSON object. Executor would consider the execution a success; if the exit code is 0.
 
-### 4.3 eventsrunner executor
+### 4.3. eventsrunner executor
 > NOTE: [Events Runner](https://github.com/luqmanMohammed/eventsrunner) is not ready for any use yet. Watch for updates.
 
 > Required Configs: `EventsRunnerBaseURL`
@@ -154,13 +154,13 @@ Script executor can be used to execute a script on the event inside the sensor e
 
 Events Runner executor can be used to forward the events to the Events Runner server to be processed. Executor supports both mTLS and JWT authentication methodologies to authenticate with the Events Runner server. Events are forwarded to the following endpoint of the Events Runner server: `<EventsRunnerBaseURL>/api/v1/events`.
 
-#### 4.3.1 mTLS authentication
+#### 4.3.1. mTLS authentication
 > Required Configs: `CaCertPath`, `ClientCertPath` and `ClientKeyPath`
 
 
 mTLS authentication is used to authenticate with the Events Runner server. Sensor will use the provided client cert and key to authenticate with the Events Runner server. Sensor will use the provided CA cert to validate the server's certificate.
 
-#### 4.3.2 JWT authentication
+#### 4.3.2. JWT authentication
 > Required Configs: `JWTToken`
 
 
