@@ -22,6 +22,8 @@ var (
 // NormalizeAndValidateRule validates and normalizes a rule.
 // Normalized by making all event types lowercase and removing duplicates.
 // Normalized by making all updateOn values lowercase and removing duplicates.
+// TODO: Add validation to make sure GVR is provided
+// TODO: Use value reference and return normalized rule
 func NormalizeAndValidateRule(rule *rules.Rule) error {
 	klog.V(3).Infof("Validating rule: %s", rule.ID)
 	if rule.ID == "" {
