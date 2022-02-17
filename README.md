@@ -137,21 +137,33 @@ Log executor/action is the simplest executor which would log the rule's id. Inte
 
 ### 4.2 script executor
 > :warning: Scripts executed by the sensor should be vetted before allowing the sensor to run it.
+
 > Required Configs: `ScriptDir` and `ScriptPrefix`
+
+
 Script executor can be used to execute a script on the event inside the sensor environment. Scripts should be located in the `ScriptDir` ([configurable](#31-sensor-configuration)) directory. Scripts should have the following naming convention: `<ScriptPrefix>-<Rule.ID>.sh`. If the script is not valid or not executable the execution would return an error. Relevant event is passed to the script as an environment variable named `EVENT` which would be a base64 encoded JSON object. Executor would consider the execution a success; if the exit code is 0.
 
 ### 4.3 eventsrunner executor
 > NOTE: [Events Runner](https://github.com/luqmanMohammed/eventsrunner) is not ready for any use yet. Watch for updates.
+
 > Required Configs: `EventsRunnerBaseURL`
+
+
 > Optional Configs: `RequestTimeout`
+
+
 Events Runner executor can be used to forward the events to the Events Runner server to be processed. Executor supports both mTLS and JWT authentication methodologies to authenticate with the Events Runner server. Events are forwarded to the following endpoint of the Events Runner server: `<EventsRunnerBaseURL>/api/v1/events`.
 
 #### 4.3.1 mTLS authentication
 > Required Configs: `CaCertPath`, `ClientCertPath` and `ClientKeyPath`
+
+
 mTLS authentication is used to authenticate with the Events Runner server. Sensor will use the provided client cert and key to authenticate with the Events Runner server. Sensor will use the provided CA cert to validate the server's certificate.
 
 #### 4.3.2 JWT authentication
 > Required Configs: `JWTToken`
+
+
 JWT authentication is used to authenticate with the Events Runner server. Sensor will use the provided JWT token to authenticate with the Events Runner server. Token will be added as a Bearer token in the request Authorization header. Sensor will use the provided via `CACertPath` to validate the server's certificate if the sever is exposing a TLS enabled endpoint.
 
 ---
