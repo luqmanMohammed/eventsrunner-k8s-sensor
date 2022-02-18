@@ -24,9 +24,9 @@ Config driven sensor for Kubernetes events.
 
 ---
 ## 1. What is it?
-[Events Runner](https://github.com/luqmanMohammed/eventsrunner) is a config driven automation server that can be used to do event-driven automation which follows the sensor-runner architecture. Sensors are  intended to send events from several sources to the Events Runner using the server's Rest API. Events Runner will process the received events and trigger actions based on configs.
+[Events Runner](https://github.com/luqmanMohammed/eventsrunner) is a config-driven automation server that can be used to do event-driven automation where it follows the sensor-runner architecture. Sensors are intended to send events from several sources to the server utilizing its Rest API. Events Runner will process the received events and trigger actions based on configs.
 
-This project implements a config driven sensor to listen on Kubernetes events and trigger actions. The sensor is implemented in Go and uses the [k8s.io/client-go](https://pkg.go.dev/k8s.io/client-go) to interface with Kubernetes. The sensor can be configured using the Rules construct to define what k8s events to listen on. The actions taken by sensor can be either forwarding the event to Events Runner or running a script.
+This project implements a config-driven sensor to listen to Kubernetes events and trigger actions. The sensor is implemented in Go and uses the [k8s.io/client-go](https://pkg.go.dev/k8s.io/client-go) library to interface with Kubernetes. The sensor can be configured using the Rules construct to define what k8s events to listen to. The actions taken by the sensor can be either forwarding the event to Events Runner or running a script.
 
 ---
 
@@ -97,18 +97,18 @@ Rules are defined in the JSON format.
     "labelFilter": "testKey=testValue",
 }
 ```
-- id (Required): Identifier of the rule. **Should be unique across entire sensor**. If multiple rules have the same id, the last one will be used. If id is not provided, the rule will be ignored. Above example rule has the id `cm-rule-1`.
-- group (Required): Group of the resource to be watched. Above example rule has the group `` since configmap is part of the core group.
-- version (Required): API Version of the resource to be watched. Above example rule has the version `v1` since configmaps are part of APIVersion v1.
-- resource (Required): Resource to be watched. Above example rule has the resource `configmaps`.
-- namespace (Optional): List of namespaces where the resource should be watched. Ignore for cluster wide resources. If empty for namespace wide resources, sensor will watch resources in all namespaces. Above example rule has the namespaces `default`.
-- eventTypes (Optional): List of event types to be considered. If empty, all event types will be considered. Valid options are `ADDED`, `MODIFIED`, `DELETED`.  Above example rule has the event types `ADDED` and `MODIFIED` configured.
-- updatesOn (Optional): List of fields to be considered for updates. If empty, all fields will be considered. Above example shows that sensor will consider the event if the `data` field is updated.
-- fieldFilter (Optional): Filter to be applied on the field. If empty, no filter will be applied. All valid kubernetes field selectors are supported. Above example shows that sensor will consider the event if the `metadata.name` field is `test`.
-- labelFilter (Optional): Filter to be applied on the label. If empty, no filter will be applied. All valid kubernetes label selectors are supported. Above example shows that sensor will consider the event if the `testKey` label is present and the value is `testValue`.
+- `id` (Required): Identifier of the rule. **Should be unique across the entire sensor**. If multiple have the same id, the last one will be used. If an id is not provided, the rule will be ignored. The above example rule has the id `cm-rule-1`.
+- `group` (Required): Group of the resource to be watched. The above example rule has the group `` since ConfigMap is part of the core API group.
+- `version` (Required): API Version of the resource to be watched. Example rule has the version `v1` since ConfigMaps are part of APIVersion v1.
+- `resource` (Required): Resource to be watched. The above example rule is set to watch the resource `configmaps`.
+- `namespace` (Optional): List of namespaces where the resource should be watched. Remove namespaces for cluster-wide resources. If empty for namespace-bound resources, the sensor will watch resources in all namespaces. The above example rule has the namespaces `default`.
+- `eventTypes` (Optional): List of event types to be considered. If empty, all event types will be considered. Valid options are `ADDED`, `MODIFIED`, `DELETED`.  The above example rule has the event types `ADDED` and `MODIFIED` configured.
+- `updatesOn` (Optional): List of fields to be considered for updates. If empty, all fields will be considered. The above example shows that the sensor will process the event only if the `data` field is updated.
+- `fieldFilter` (Optional): Filter to be applied on the field. If empty, no filter will be applied. All valid Kubernetes field selectors are supported. The above example shows that the sensor will consider the event if the `metadata.name` field is `test`
+- `labelFilter` (Optional): Filter to be applied on the label. If empty, no filter will be applied. All valid Kubernetes label selectors are supported. The above example shows that the sensor will consider the event if the `testKey` label is present and the value is `testValue`
 
 #### 3.2.1. Rule collection from ConfigMaps
-Kubernetes Sensor supports loading rules from ConfigMaps. ConfigMaps in the `SensorNamespace` ([configurable](#31-sensor-configuration)) with the label `SensorRuleConfigMapLabel` ([configurable](#31-sensor-configuration)) will be considered as rules ConfigMaps. Rule ConfigMap's data field should have the key `rules` and the value should be a JSON array of rules JSON objects as depicted above. Sensor will automatically reload the affected rules if any of the rule ConfigMaps are updated.
+Kubernetes Sensor supports loading rules from ConfigMaps. ConfigMaps in the `SensorNamespace` ([configurable](#31-sensor-configuration)) with the label `SensorRuleConfigMapLabel` ([configurable](#31-sensor-configuration)) will be considered as rules ConfigMaps. Rule ConfigMap's data field should have the key `rules` and the value should be a JSON array of rules JSON objects as depicted above. The sensor will automatically reload the affected rules if any of the rule ConfigMaps are updated.
 
 ---
 
@@ -128,12 +128,14 @@ Executor is the component that will be used to process the events. Event structu
 - eventType: Type of the event
 - ruleID: Identifier of the rule that was triggered
 - objects: List of objects that triggered the event
-    - ADDED: object that was added
-    - MODIFIED: pre-update object will be stored at index 0 and post-update object at index 1.
-    - DELETED: object that was deleted
+    - ADDED: The object that was added
+    - MODIFIED: Pre-update object will be stored at index 0 and post-update object at index 1
+    - DELETED: The object that was deleted
+
+Specific executor can be configured using the `ExecutorType` ([configurable](#31-sensor-configuration)) config.
 
 ### 4.1. log executor
-Log executor/action is the simplest executor which would log the rule's id. Intended to be used for debugging/testing/poc purposes.
+Log executor/action is the simplest executor which would log the rule's id. Intended to be used for debugging/testing/POC purposes.
 
 ### 4.2. script executor
 > :warning: Scripts executed by the sensor should be vetted before allowing the sensor to run it.
@@ -141,12 +143,12 @@ Log executor/action is the simplest executor which would log the rule's id. Inte
 > Required Configs: `ScriptDir` and `ScriptPrefix`
 
 
-Script executor can be used to execute a script on the event inside the sensor environment. Scripts should be located in the `ScriptDir` ([configurable](#31-sensor-configuration)) directory. Scripts should have the following naming convention: `<ScriptPrefix>-<Rule.ID>.sh`. If the script is not valid or not executable the execution would return an error. Relevant event is passed to the script as an environment variable named `EVENT` which would be a base64 encoded JSON object. Executor would consider the execution a success; if the exit code is 0.
+Script executor can be used to execute a script on the event inside the sensor environment. Scripts should be located in the `ScriptDir` ([configurable](#31-sensor-configuration)) directory. Scripts should have the following naming convention: `<ScriptPrefix>-<Rule.ID>.sh`. If the script is not valid nor executable, the execution will return an error. The relevant event will be passed to the script as an environment variable named `EVENT` which would be a base64 encoded JSON object. The executor would consider the execution a success; if the exit code is 0.
 
 ### 4.3. eventsrunner executor
 > NOTE: [Events Runner](https://github.com/luqmanMohammed/eventsrunner) is not ready for any use yet. Watch for updates.
 
-> Required Configs: `EventsRunnerBaseURL`
+> Required Configs: `AuthType` and `EventsRunnerBaseURL`
 
 
 > Optional Configs: `RequestTimeout`
@@ -154,17 +156,19 @@ Script executor can be used to execute a script on the event inside the sensor e
 
 Events Runner executor can be used to forward the events to the Events Runner server to be processed. Executor supports both mTLS and JWT authentication methodologies to authenticate with the Events Runner server. Events are forwarded to the following endpoint of the Events Runner server: `<EventsRunnerBaseURL>/api/v1/events`.
 
+Authentication methodology can be configured using the `AuthType` ([configurable](#31-sensor-configuration)) config.
+
 #### 4.3.1. mTLS authentication
 > Required Configs: `CaCertPath`, `ClientCertPath` and `ClientKeyPath`
 
 
-mTLS authentication is used to authenticate with the Events Runner server. Sensor will use the provided client cert and key to authenticate with the Events Runner server. Sensor will use the provided CA cert to validate the server's certificate.
+mTLS authentication is used to authenticate with the Events Runner server. The sensor will use the provided client cert and key to authenticate with the Events Runner server. The sensor will use the provided CA cert to validate the server's certificate.
 
 #### 4.3.2. JWT authentication
 > Required Configs: `JWTToken`
 
 
-JWT authentication is used to authenticate with the Events Runner server. Sensor will use the provided JWT token to authenticate with the Events Runner server. Token will be added as a Bearer token in the request Authorization header. Sensor will use the provided via `CACertPath` to validate the server's certificate if the sever is exposing a TLS enabled endpoint.
+JWT authentication is used to authenticate with the Events Runner server. The sensor will use the provided JWT token to authenticate with the Events Runner server. Token will be added as a Bearer token in the request Authorization header. The sensor will utilize the CA cert provided via `CACertPath` to validate the server's certificate if it's exposing a TLS enabled endpoint.
 
 ---
 
