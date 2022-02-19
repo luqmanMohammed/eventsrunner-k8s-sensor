@@ -1,0 +1,56 @@
+name: Release
+on:
+  push:
+    branches: [ main ]
+
+env:
+  go_version: 1.17
+  k8s_test_image: rancher/k3s:v1.23.3-k3s1
+
+jobs:
+  build:
+      runs-on: ubuntu-latest
+      steps:
+        - uses: actions/checkout@v2
+        - uses: actions/setup-go@v2
+          with:
+            go-version: ${{ env.go_version }}
+        - uses: actions/cache@v2
+          with:
+            path: |
+              ~/.cache/go-build
+              ~/go/pkg/mod
+            key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+            restore-keys: |
+              ${{ runner.os }}-go-
+        - name: Build
+          run: go build ./...
+
+  test:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-go@v2
+        with:
+          go-version: ${{ env.go_version }}
+      - uses: actions/cache@v2
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+      - name: Create Simple K8s Cluster
+        uses: AbsaOSS/k3d-action@v2
+        with:
+          cluster-name: cluster
+          args: >-
+            --image=${{ env.k8s_test_image }}
+      - name: Run tests
+        run: go test ./... -coverprofile coverage.out
+      - name: Codecov
+        uses: codecov/codecov-action@v2.1.0
+        with:
+          files: coverage.out
