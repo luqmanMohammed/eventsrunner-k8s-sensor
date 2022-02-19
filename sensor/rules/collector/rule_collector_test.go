@@ -36,7 +36,7 @@ var (
 		"group": "",
 		"version": "v1",
 		"resource": "namespaces",
-		"eventTypes": ["ADDED", "MODIFIED"]
+		"eventTypes": ["ADDED"]
 	},{
 		"id": "basic-pod-rule",
 		"group": "",
@@ -90,6 +90,9 @@ func TestStarterRuleCollectionFromMultipleConfigMaps(t *testing.T) {
 	} else {
 		if len(collectedRules) != 3 {
 			t.Fatalf("Expected 3 rules, got %d", len(collectedRules))
+		}
+		if len(collectedRules["basic-configmap-rule"].EventTypes) != 2 {
+			t.Fatalf("Expected 2 event types, got %d", len(collectedRules["basic-configmap-rule"].EventTypes))
 		}
 		if collectedRules["basic-namespace-rule"].EventTypes[0] != rules.ADDED {
 			t.Fatalf("Expected event type %s, got %s", rules.ADDED, collectedRules["basic-namespace-rule"].EventTypes[0])

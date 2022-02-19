@@ -44,3 +44,17 @@ func TestFindZeroValue(t *testing.T) {
 		t.Errorf("Expected to find zero value in map, got %s", key)
 	}
 }
+
+func TestConvertToStringLower(t *testing.T) {
+	testStr := "Test"
+	if ConvertToStringLower([]string{testStr})[0] != "test" {
+		t.Error("Expected to convert string to lowercase")
+	}
+}
+
+func TestRemoveDuplicateStrings(t *testing.T) {
+	testStr := []string{"a", "b", "c", "a"}
+	if len(RemoveDuplicateStrings(testStr)) != 3 {
+		t.Error("Expected to remove duplicate strings")
+	}
+}
