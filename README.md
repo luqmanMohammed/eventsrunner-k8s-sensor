@@ -13,7 +13,8 @@ Config driven sensor for Kubernetes events.
 - [3. Configuration](#3-configuration)
   - [3.1. Sensor configuration](#31-sensor-configuration)
   - [3.2. Rules](#32-rules)
-    - [3.2.1. Rule collection from ConfigMaps](#321-rule-collection-from-configmaps)
+    - [3.2.1. Rule Normalization and Validation](#321-rule-normalization-and-validation)
+    - [3.2.2. Rule collection from ConfigMaps](#322-rule-collection-from-configmaps)
 - [4. Executor (Processor/Action)](#4-executor-processoraction)
   - [4.1. log executor](#41-log-executor)
   - [4.2. script executor](#42-script-executor)
@@ -107,7 +108,24 @@ Rules are defined in the JSON format.
 - `fieldFilter` (Optional): Filter to be applied on the field. If empty, no filter will be applied. All valid Kubernetes field selectors are supported. The above example shows that the sensor will consider the event if the `metadata.name` field is `test`
 - `labelFilter` (Optional): Filter to be applied on the label. If empty, no filter will be applied. All valid Kubernetes label selectors are supported. The above example shows that the sensor will consider the event if the `testKey` label is present and the value is `testValue`
 
-#### 3.2.1. Rule collection from ConfigMaps
+#### 3.2.1. Rule Normalization and Validation
+> If any of the rules are invalid, the sensor will ignore them and continue to process the rest of the rules.
+
+Collected rules will be normalized and validated.
+
+Following steps will be performed to normalize the rule:
+1. Remove duplicates in the `eventTypes` list and convert the list to lowercase
+2. Remove duplicates in the `updatesOn` list and convert the list to lowercase
+3. Remove duplicates in the `namespaces` list and convert the list to lowercase
+4. Remove namespaces if provided for cluster-wide resources
+
+Following steps will be performed to validate the rule:
+1. Validate that the `id` is not empty
+2. Validate all items in the `eventTypes` list are valid. Valid options are `ADDED`, `MODIFIED` and `DELETED` (Lowercase is also accepted)
+3. Validate that the resource identifier is valid by confirming that `group` and `version` are valid
+4. Confirm that the configured resource is available in the cluster.
+
+#### 3.2.2. Rule collection from ConfigMaps
 Kubernetes Sensor supports loading rules from ConfigMaps. ConfigMaps in the `SensorNamespace` ([configurable](#31-sensor-configuration)) with the label `SensorRuleConfigMapLabel` ([configurable](#31-sensor-configuration)) will be considered as rules ConfigMaps. Rule ConfigMap's data field should have the key `rules` and the value should be a JSON array of rules JSON objects as depicted above. The sensor will automatically reload the affected rules if any of the rule ConfigMaps are updated.
 
 ---
@@ -125,12 +143,12 @@ Executor is the component that will be used to process the events. Event structu
     ]
 }
 ```
-- eventType: Type of the event
-- ruleID: Identifier of the rule that was triggered
-- objects: List of objects that triggered the event
-    - ADDED: The object that was added
-    - MODIFIED: Pre-update object will be stored at index 0 and post-update object at index 1
-    - DELETED: The object that was deleted
+- `eventType`: Type of the event
+- `ruleID`: Identifier of the rule that was triggered
+- `objects`: List of objects that triggered the event
+    - `ADDED`: The object that was added
+    - `MODIFIED`: Pre-update object will be stored at index 0 and post-update object at index 1
+    - `DELETED`: The object that was deleted
 
 Specific executor can be configured using the `ExecutorType` ([configurable](#31-sensor-configuration)) config.
 
