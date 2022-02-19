@@ -59,9 +59,7 @@ func (cmrc ConfigMapRuleCollector) Collect(ctx context.Context) (map[rules.RuleI
 		klog.V(1).ErrorS(err, "Error trying to list configmaps")
 		return nil, err
 	}
-	klog.V(1).Infof("Number of configmaps to process: %d", len(cmList.Items))
-	rules := cmrc.parseCollectedConfigMapsIntoRules(cmList.Items)
-	return rules, nil
+	return cmrc.parseCollectedConfigMapsIntoRules(cmList.Items)
 }
 
 // parseCollectedConfigMapsIntoRules parses provided list of configmaps into
@@ -71,7 +69,7 @@ func (cmrc ConfigMapRuleCollector) Collect(ctx context.Context) (map[rules.RuleI
 // Each rule should contain a valid rule ID, else rule wont be processed.
 // If any errors are found during json decoding, error will be logged and the
 // function will continue executing.
-func (cmrc ConfigMapRuleCollector) parseCollectedConfigMapsIntoRules(cmList []v1.ConfigMap) map[rules.RuleID]*rules.Rule {
+func (cmrc ConfigMapRuleCollector) parseCollectedConfigMapsIntoRules(cmList []v1.ConfigMap) (map[rules.RuleID]*rules.Rule, error) {
 	parsedRules := make(map[rules.RuleID]*rules.Rule)
 	for _, cm := range cmList {
 		tmpRules := make([]*rules.Rule, 0)
@@ -85,26 +83,14 @@ func (cmrc ConfigMapRuleCollector) parseCollectedConfigMapsIntoRules(cmList []v1
 			continue
 		}
 		for _, rule := range tmpRules {
-			switch validator.NormalizeAndValidateRule(rule) {
-			case nil:
-				klog.V(3).Infof("Rule %v is valid", rule.ID)
-			case validator.ErrRuleIDNotFound:
-				klog.V(3).ErrorS(validator.ErrRuleIDNotFound, fmt.Sprintf("Rule %v doesn't have an ID. Skipping", rule.ID))
-				continue
-			case validator.ErrRuleEventTypesNotFound:
-				klog.V(3).ErrorS(validator.ErrRuleEventTypesNotFound, fmt.Sprintf("Rule %v doesn't have an event types list. Skipping", rule.ID))
-				continue
-			case validator.ErrRuleEventTypesNotValid:
-				klog.V(3).ErrorS(validator.ErrRuleEventTypesNotValid, fmt.Sprintf("Rule %v has an invalid event types list. Should be one of added, modified or deleted. Skipping", rule.ID))
-				continue
-			}
-			if _, ok := parsedRules[rule.ID]; !ok {
+			if _, ok := parsedRules[rule.ID]; ok {
+				klog.V(2).Infof("Rule %v already exists. Skipping", rule.ID)
+			} else {
 				parsedRules[rule.ID] = rule
-				klog.V(3).Infof("Rule %v successfully loaded from configmap %v", rule.ID, cm.Name)
 			}
 		}
 	}
-	return parsedRules
+	return validator.NormalizeAndValidateRulesBatch(cmrc.clientSet, parsedRules)
 }
 
 // StartRuleCollector will continuously listen for rule configmap changes and
@@ -148,7 +134,11 @@ func (cmrc ConfigMapRuleCollector) StartRuleCollector(ctx context.Context, senso
 		case <-changeQueue:
 			klog.V(2).Info("Rule change detected. Parsing and reloading rules")
 			configMapList := parseStoreIntoConfigMaps(informerFactory.Core().V1().ConfigMaps().Informer().GetStore())
-			ruleMap := cmrc.parseCollectedConfigMapsIntoRules(configMapList)
+			ruleMap, err := cmrc.parseCollectedConfigMapsIntoRules(configMapList)
+			if err != nil {
+				klog.V(2).ErrorS(err, "Error parsing and validating rules")
+				continue
+			}
 			sensorRI.ReloadRules(ruleMap)
 		}
 	}

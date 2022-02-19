@@ -48,27 +48,27 @@ var (
 // Validate resource identifiers are valid.
 // Validate configured resources are part of the server's resources.
 // Validate that all event types are one of added, modified, or deleted.
-func NormalizeAndValidateRulesBatch(clientSet *kubernetes.Clientset, rulesMap map[rules.RuleID]rules.Rule) map[rules.RuleID]rules.Rule {
-	fmt.Printf("Validating a batch of rules: %d\n", len(rulesMap))
+func NormalizeAndValidateRulesBatch(clientSet *kubernetes.Clientset, rulesMap map[rules.RuleID]*rules.Rule) (map[rules.RuleID]*rules.Rule, error) {
+	klog.V(2).Infof("Validating a batch of rules: %d\n", len(rulesMap))
 	serverResourceList, err := clientSet.DiscoveryClient.ServerPreferredResources()
 	if err != nil {
 		klog.V(1).ErrorS(err, "failed to get server resources. skipping rule normalization and validation")
-		return nil
+		return nil, err
 	}
 	serverResources := make(map[string][]metav1.APIResource)
 	for _, serverResourceGroup := range serverResourceList {
 		serverResources[serverResourceGroup.GroupVersion] = serverResourceGroup.APIResources
 	}
-	normalizedRules := make(map[rules.RuleID]rules.Rule)
+	normalizedRules := make(map[rules.RuleID]*rules.Rule)
 	for id, rule := range rulesMap {
-		normalizedRule, err := normalizeAndValidateRule(rule, serverResources)
+		normalizedRule, err := normalizeAndValidateRule(*rule, serverResources)
 		if err != nil {
 			klog.V(1).ErrorS(err, "failed to normalize and validate rule %s. this rule will be skipped", id)
 			continue
 		}
-		normalizedRules[id] = normalizedRule
+		normalizedRules[id] = &normalizedRule
 	}
-	return normalizedRules
+	return normalizedRules, nil
 }
 
 // normalizeAndValidateRule validates and normalizes a rule.

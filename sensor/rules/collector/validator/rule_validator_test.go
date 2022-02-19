@@ -53,17 +53,17 @@ var (
 
 func TestRuleNormalizationAndValidation(t *testing.T) {
 	clientset := kubernetes.NewForConfigOrDie(utils.GetKubeAPIConfigOrDie(""))
-	testRulesMap := map[rules.RuleID]rules.Rule{
-		ruleMissingID.ID:              ruleMissingID,
-		ruleMissingEventsTypes.ID:     ruleMissingEventsTypes,
-		ruleInvalidEventTypes.ID:      ruleInvalidEventTypes,
-		ruleVersionMissingResource.ID: ruleVersionMissingResource,
-		ruleInvalidGroup.ID:           ruleInvalidGroup,
-		ruleInvalidResource.ID:        ruleInvalidResource,
-		ruleNormalized.ID:             ruleNormalized,
-		ruleNormalizedNamespace.ID:    ruleNormalizedNamespace,
+	testRulesMap := map[rules.RuleID]*rules.Rule{
+		ruleMissingID.ID:              &ruleMissingID,
+		ruleMissingEventsTypes.ID:     &ruleMissingEventsTypes,
+		ruleInvalidEventTypes.ID:      &ruleInvalidEventTypes,
+		ruleVersionMissingResource.ID: &ruleVersionMissingResource,
+		ruleInvalidGroup.ID:           &ruleInvalidGroup,
+		ruleInvalidResource.ID:        &ruleInvalidResource,
+		ruleNormalized.ID:             &ruleNormalized,
+		ruleNormalizedNamespace.ID:    &ruleNormalizedNamespace,
 	}
-	normalizedRulesMap := NormalizeAndValidateRulesBatch(clientset, testRulesMap)
+	normalizedRulesMap, _ := NormalizeAndValidateRulesBatch(clientset, testRulesMap)
 	if normalizedRulesMap == nil {
 		t.Fatalf("normalized rules map is nil")
 	}

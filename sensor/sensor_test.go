@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"context"
 	"errors"
-	"fmt"
 	"io/ioutil"
 	"os"
 	"testing"
@@ -443,7 +442,6 @@ func TestSensorWorkingWithClusterBoundResources(t *testing.T) {
 	sensor := setupSensor()
 	go sensor.Start(rulesClusterbound)
 	waitStartSensor(t, sensor, rulesClusterbound, 10)
-	fmt.Println("came")
 	ns := &v1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "test-namespace",
