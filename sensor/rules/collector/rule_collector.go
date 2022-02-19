@@ -59,6 +59,7 @@ func (cmrc ConfigMapRuleCollector) Collect(ctx context.Context) (map[rules.RuleI
 		klog.V(1).ErrorS(err, "Error trying to list configmaps")
 		return nil, err
 	}
+	klog.V(1).Infof("Number of configmaps to process: %d", len(cmList.Items))
 	return cmrc.parseCollectedConfigMapsIntoRules(cmList.Items)
 }
 
