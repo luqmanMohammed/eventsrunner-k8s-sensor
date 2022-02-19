@@ -54,3 +54,6 @@ jobs:
         uses: codecov/codecov-action@v2.1.0
         with:
           files: coverage.out
+          fail_ci_if_error: true
+      - name: Refresh Go Report
+        uses: creekorful/goreportcard-action@v1.0
