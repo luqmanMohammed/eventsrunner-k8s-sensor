@@ -2,6 +2,7 @@ package utils
 
 import (
 	"reflect"
+	"strings"
 
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
@@ -59,4 +60,26 @@ func FindZeroValue(values map[string]interface{}) string {
 		}
 	}
 	return ""
+}
+
+// RemoveDuplicateStrings returns a unique list of strings from the provided list.
+func RemoveDuplicateStrings(values []string) []string {
+	unique := make(map[string]struct{})
+	for _, v := range values {
+		unique[v] = struct{}{}
+	}
+	uniqueValues := make([]string, 0, len(unique))
+	for k := range unique {
+		uniqueValues = append(uniqueValues, k)
+	}
+	return uniqueValues
+}
+
+// ConvertToStringLower converts slice of strings to lowercase.
+func ConvertToStringLower(values []string) []string {
+	lower := make([]string, 0, len(values))
+	for _, v := range values {
+		lower = append(lower, strings.ToLower(v))
+	}
+	return lower
 }
