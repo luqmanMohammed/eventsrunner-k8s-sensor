@@ -2,7 +2,7 @@
 [![Go Report Card](https://goreportcard.com/badge/github.com/luqmanMohammed/eventsrunner-k8s-sensor)](https://goreportcard.com/report/github.com/luqmanMohammed/eventsrunner-k8s-sensor)
 ![GitHub Workflow Status](https://img.shields.io/github/workflow/status/luqmanMohammed/eventsrunner-k8s-sensor/Release?logo=github)
 ![GitHub Workflow Status](https://img.shields.io/github/workflow/status/luqmanMohammed/eventsrunner-k8s-sensor/CodeQL?label=CodeQL&logo=Github)
-![Codecov](https://img.shields.io/codecov/c/github/luqmanMohammed/eventsrunner-k8s-sensor?logo=codecov)
+[![codecov](https://codecov.io/gh/luqmanMohammed/eventsrunner-k8s-sensor/branch/main/graph/badge.svg?token=8O5TTEUUP8)](https://codecov.io/gh/luqmanMohammed/eventsrunner-k8s-sensor)
 
 Config driven sensor for Kubernetes events.
 
