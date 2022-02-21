@@ -17,8 +17,8 @@ spec:
       serviceAccountName: eventsrunner-service-account
       containers:
         - name: eventsrunner-k8s-sensor
-          image: "docker.io/library/eventsrunner-k8s-sensor:v0.0.1-alpha.4"
-          args: ["-v2"]
+          image: "luqmanmohammed/eventsrunner-k8s-sensor"
+          args: ["-v4"]
           volumeMounts:
             - name: eventsrunner-k8s-sensor-config
               mountPath: /etc/eventsrunner-k8s-sensor

@@ -1,4 +1,8 @@
 # Caution: this cluster role provides access to all resources in the cluster
+# An all-access cluster role is not recommended for production use.
+# This cluster role is intended for testing purposes only.
+# Provide access only to the resources you want to listen in a production environment.
+# Skip ClusterRole altogether if you want listen to the resources only in a specific namespace, go with a Role.
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
@@ -10,7 +14,9 @@ rules:
     resources:
       - "*"
     verbs:
-      - "*"
+      - get
+      - list
+      - watch
 
 ---
 apiVersion: rbac.authorization.k8s.io/v1
@@ -34,3 +40,35 @@ metadata:
   name: eventsrunner-service-account
   namespace: eventsrunner
 automountServiceAccountToken: true
+
+# Role to collect rules from sensor namespace
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: eventsrunner-role
+  namespace: eventsrunner
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - configmaps
+    verbs:
+      - list
+      - get
+      - watch
+    
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: eventsrunner-role-binding
+  namespace: eventsrunner
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: eventsrunner-role
+subjects:
+  - kind: ServiceAccount
+    name: eventsrunner-service-account
+    namespace: eventsrunner
