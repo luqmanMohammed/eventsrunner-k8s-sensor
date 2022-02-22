@@ -12,19 +12,22 @@ Config driven sensor for Kubernetes events.
 ## Table of Contents <!-- omit in toc -->
 
 - [1. What is it?](#1-what-is-it)
-- [2. Usage](#2-usage)
-- [3. Configuration](#3-configuration)
-  - [3.1. Sensor configuration](#31-sensor-configuration)
-  - [3.2. Rules](#32-rules)
-    - [3.2.1. Rule Normalization and Validation](#321-rule-normalization-and-validation)
-    - [3.2.2. Rule collection from ConfigMaps](#322-rule-collection-from-configmaps)
-- [4. Executor (Processor/Action)](#4-executor-processoraction)
-  - [4.1. log executor](#41-log-executor)
-  - [4.2. script executor](#42-script-executor)
-  - [4.3. eventsrunner executor](#43-eventsrunner-executor)
-    - [4.3.1. mTLS authentication](#431-mtls-authentication)
-    - [4.3.2. JWT authentication](#432-jwt-authentication)
-- [5. License](#5-license)
+- [2. Build](#2-build)
+- [3. Deployment](#3-deployment)
+  - [3.1. Kubernetes](#31-kubernetes)
+  - [3.2. Helm](#32-helm)
+- [4. Configuration](#4-configuration)
+  - [4.1. Sensor configuration](#41-sensor-configuration)
+  - [4.2. Rules](#42-rules)
+    - [4.2.1. Rule Normalization and Validation](#421-rule-normalization-and-validation)
+    - [4.2.2. Rule collection from ConfigMaps](#422-rule-collection-from-configmaps)
+- [5. Executor (Processor/Action)](#5-executor-processoraction)
+  - [5.1. log executor](#51-log-executor)
+  - [5.2. script executor](#52-script-executor)
+  - [5.3. eventsrunner executor](#53-eventsrunner-executor)
+    - [5.3.1. mTLS authentication](#531-mtls-authentication)
+    - [5.3.2. JWT authentication](#532-jwt-authentication)
+- [6. License](#6-license)
 
 ---
 
@@ -36,11 +39,35 @@ This project implements a config-driven sensor to listen to Kubernetes events an
 
 ---
 
-## 2. Usage
+## 2. Build
 
-## 3. Configuration
+## 3. Deployment
 
-### 3.1. Sensor configuration
+### 3.1. Kubernetes
+
+> Caution: this cluster role provides access to all resources in the cluster.
+> An all-access cluster role is not recommended for production use.
+> This cluster role is intended for testing purposes only.
+> Provide access only to the resources you want to listen in a production environment.
+> Skip ClusterRole altogether if you want listen to the resources only in a specific namespace, go with a Role.
+
+The sensor can be deployed using bare kubernetes resources. Inspect the `kubernetes` directory for more information.
+
+```shell
+kubectl apply -f kubernetes/
+```
+
+Once the sensor is deployed, you can create rules to define what events to listen to. Checkout the example rules in the examples directory.
+Sensor would automatically register new rules when they are created. But if your making any changes to the sensor configuration, make sure
+to restart the sensor.
+
+### 3.2. Helm
+
+TBA
+
+## 4. Configuration
+
+### 4.1. Sensor configuration
 
 >[Viper](https://github.com/spf13/viper) is used to manage sensor configuration.
 
@@ -91,7 +118,7 @@ scriptDir:    "/tmp/test-scripts"
 scriptPrefix: "script"
 ```
 
-### 3.2. Rules
+### 4.2. Rules
 
 Rules are defined in the JSON format.
 
@@ -119,7 +146,7 @@ Rules are defined in the JSON format.
 - `fieldFilter` (Optional): Filter to be applied on the field. If empty, no filter will be applied. All valid Kubernetes field selectors are supported. The above example shows that the sensor will consider the event if the `metadata.name` field is `test`
 - `labelFilter` (Optional): Filter to be applied on the label. If empty, no filter will be applied. All valid Kubernetes label selectors are supported. The above example shows that the sensor will consider the event if the `testKey` label is present and the value is `testValue`
 
-#### 3.2.1. Rule Normalization and Validation
+#### 4.2.1. Rule Normalization and Validation
 
 > - If any of the rules are invalid, the sensor will ignore them and continue to process the rest of the rules.
 
@@ -139,13 +166,13 @@ Following steps will be performed to validate the rule:
 3. Validate that the resource identifier is valid by confirming that `group` and `version` are valid
 4. Confirm that the configured resource is available in the cluster.
 
-#### 3.2.2. Rule collection from ConfigMaps
+#### 4.2.2. Rule collection from ConfigMaps
 
 Kubernetes Sensor supports loading rules from ConfigMaps. ConfigMaps in the `SensorNamespace` ([configurable](#31-sensor-configuration)) with the label `SensorRuleConfigMapLabel` ([configurable](#31-sensor-configuration)) will be considered as rules ConfigMaps. Rule ConfigMap's data field should have the key `rules` and the value should be a JSON array of rules JSON objects as depicted above. The sensor will automatically reload the affected rules if any of the rule ConfigMaps are updated.
 
 ---
 
-## 4. Executor (Processor/Action)
+## 5. Executor (Processor/Action)
 
 Executor is the component that will be used to process the events. Event structure as follows:
 
@@ -170,18 +197,18 @@ Executor is the component that will be used to process the events. Event structu
 
 Specific executor can be configured using the `ExecutorType` ([configurable](#31-sensor-configuration)) config.
 
-### 4.1. log executor
+### 5.1. log executor
 
 Log executor/action is the simplest executor which would log the rule's id. Intended to be used for debugging/testing/POC purposes.
 
-### 4.2. script executor
+### 5.2. script executor
 
 > - :warning: Scripts executed by the sensor should be vetted before allowing the sensor to run it.
 > - Required Configs: `ScriptDir` and `ScriptPrefix`
 
 Script executor can be used to execute a script on the event inside the sensor environment. Scripts should be located in the `ScriptDir` ([configurable](#31-sensor-configuration)) directory. Scripts should have the following naming convention: `<ScriptPrefix>-<Rule.ID>.sh`. If the script is not valid nor executable, the execution will return an error. The relevant event will be passed to the script as an environment variable named `EVENT` which would be a base64 encoded JSON object. The executor would consider the execution a success; if the exit code is 0.
 
-### 4.3. eventsrunner executor
+### 5.3. eventsrunner executor
 
 > - NOTE: [Events Runner](https://github.com/luqmanMohammed/eventsrunner) is not ready for any use yet. Watch for updates.
 > - Required Configs: `AuthType` and `EventsRunnerBaseURL`
@@ -191,13 +218,13 @@ Events Runner executor can be used to forward the events to the Events Runner se
 
 Authentication methodology can be configured using the `AuthType` ([configurable](#31-sensor-configuration)) config.
 
-#### 4.3.1. mTLS authentication
+#### 5.3.1. mTLS authentication
 
 > - Required Configs: `CaCertPath`, `ClientCertPath` and `ClientKeyPath`
 
 mTLS authentication is used to authenticate with the Events Runner server. The sensor will use the provided client cert and key to authenticate with the Events Runner server. The sensor will use the provided CA cert to validate the server's certificate.
 
-#### 4.3.2. JWT authentication
+#### 5.3.2. JWT authentication
 
 > - Required Configs: `JWTToken`
 
@@ -205,6 +232,6 @@ JWT authentication is used to authenticate with the Events Runner server. The se
 
 ---
 
-## 5. License
+## 6. License
 
 This software is licensed under the MIT license.
