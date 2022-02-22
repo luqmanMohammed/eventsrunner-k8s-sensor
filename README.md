@@ -3,7 +3,7 @@
 [![Go Report Card](https://goreportcard.com/badge/github.com/luqmanMohammed/eventsrunner-k8s-sensor)](https://goreportcard.com/report/github.com/luqmanMohammed/eventsrunner-k8s-sensor)
 ![GitHub Workflow Status](https://img.shields.io/github/workflow/status/luqmanMohammed/eventsrunner-k8s-sensor/Release?logo=github)
 ![GitHub Workflow Status](https://img.shields.io/github/workflow/status/luqmanMohammed/eventsrunner-k8s-sensor/CodeQL?label=CodeQL&logo=Github)
-![Codecov](https://img.shields.io/codecov/c/github/luqmanMohammed/eventsrunner-k8s-sensor?logo=codecov)
+[![codecov](https://codecov.io/gh/luqmanMohammed/eventsrunner-k8s-sensor/branch/main/graph/badge.svg?token=8O5TTEUUP8)](https://codecov.io/gh/luqmanMohammed/eventsrunner-k8s-sensor)
 
 Config driven sensor for Kubernetes events.
 
@@ -47,15 +47,16 @@ This project implements a config-driven sensor to listen to Kubernetes events an
 Sensor configuration will be collected from the following > sources in the following order:
 
 1. Defaults
-2. Environment variables
-    - Environment variables must have the prefix `ER_K8S_SENSOR_`
-3. Configuration file
+2. Configuration file
     - Configuration file must be named `config.yaml`
     - Config file will be loaded from the following locations in the following order.
         1. /etc/er-k8s-sensor/config.yaml
         2. $HOME/.er-k8s-sensor/config.yaml
     - Config file location can be explicitly specified using the `--config` flag.
     - Configuration file must be in YAML format
+3. Environment variables
+    - Environment variables must have the prefix `ER_K8S_`
+4. Command line arguments
 
 Configs used by the sensor are:
 

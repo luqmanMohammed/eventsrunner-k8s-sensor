@@ -113,6 +113,9 @@ func setupSetupMockServer(clientAuth tls.ClientAuthType, port string) *http.Serv
 	mockMux := http.NewServeMux()
 	mockMux.HandleFunc("/api/v1/events/", func(rw http.ResponseWriter, r *http.Request) {
 		fmt.Println("Mock server got request")
+		if r.Header.Get("Authorization") != "Bearer test-token" {
+			rw.WriteHeader(http.StatusUnauthorized)
+		}
 		rw.WriteHeader(http.StatusOK)
 	})
 	server := &http.Server{
@@ -134,6 +137,7 @@ func TestMutualTLSAuthProcessEvent(t *testing.T) {
 		ClientKeyPath:       "/tmp/test-pki/client.key",
 		ClientCertPath:      "/tmp/test-pki/client.crt",
 		RequestTimeout:      time.Minute,
+		JWTToken:            "test-token",
 	}
 	server := setupSetupMockServer(tls.RequireAndVerifyClientCert, "8080")
 	go server.ListenAndServeTLS("/tmp/test-pki/server.crt", "/tmp/test-pki/server.key")
@@ -157,8 +161,43 @@ func TestJWTAuthProcessEvent(t *testing.T) {
 		RequestTimeout:      time.Minute,
 		JWTToken:            "test-secret",
 		CaCertPath:          "/tmp/test-pki/ca.crt",
+		ClientKeyPath:       "/tmp/test-pki/client.key",
+		ClientCertPath:      "/tmp/test-pki/client.crt",
 	}
 	server := setupSetupMockServer(tls.NoClientCert, "8081")
+	mockMux := http.NewServeMux()
+	mockMux.HandleFunc("/api/v1/events/", func(rw http.ResponseWriter, r *http.Request) {
+		t.Log("JWT Mock server got request")
+		if r.Header.Get("Authorization") != "Bearer test-secret" {
+			rw.WriteHeader(http.StatusUnauthorized)
+		} else {
+			rw.WriteHeader(http.StatusOK)
+		}
+	})
+	server.Handler = mockMux
+	server.ErrorLog = log.New(os.Stdout, "", 0)
+	go server.ListenAndServeTLS("/tmp/test-pki/server.crt", "/tmp/test-pki/server.key")
+	time.Sleep(2 * time.Second)
+	erClient, err := New(JWT, &ercOpts)
+	if err != nil {
+		t.Fatalf("Failed to create JWT client due to: %v", err)
+	}
+	if err = erClient.ProcessEvent(testEvent); err != nil {
+		t.Fatalf("Failed to process event due to: %v", err)
+	}
+}
+
+func TestJWTAuthWithMTLSProcessEvent(t *testing.T) {
+	if err := setupTLS(); err != nil {
+		t.Fatalf("Failed to setup TLS due to: %v", err)
+	}
+	ercOpts := EventsRunnerClientOpts{
+		EventsRunnerBaseURL: "https://localhost:8082",
+		RequestTimeout:      time.Minute,
+		JWTToken:            "test-secret",
+		CaCertPath:          "/tmp/test-pki/ca.crt",
+	}
+	server := setupSetupMockServer(tls.NoClientCert, "8082")
 	mockMux := http.NewServeMux()
 	mockMux.HandleFunc("/api/v1/events/", func(rw http.ResponseWriter, r *http.Request) {
 		t.Log("JWT Mock server got request")

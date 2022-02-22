@@ -77,8 +77,9 @@ type Config struct {
 // a Config Struct.
 // Viper is configured to collect configs in the following order:
 // 1. Default variables
-// 2. Environment variables
-// 3. Config file
+// 2. Config file
+// 3. Environment variables
+// 4. Command line arguments
 // Environment variables should start with the prefix ER_K8S_SENSOR_ to be collected.
 // Config file should be in the yaml format.
 // Config files will be collected in the following locations in the following order
@@ -90,6 +91,7 @@ func ParseConfigFromViper(cfgPath string, verbosity int) (*Config, error) {
 	for key, value := range DefaultConfig {
 		viper.SetDefault(key, value)
 	}
+
 	if cfgPath != "" {
 		klog.V(2).Infof("Collecting config from provided config file path: %s", cfgPath)
 		viper.SetConfigFile(cfgPath)
@@ -101,20 +103,31 @@ func ParseConfigFromViper(cfgPath string, verbosity int) (*Config, error) {
 		viper.AddConfigPath("/etc/er-k8s-sensor")
 		viper.AddConfigPath(home + "/.er-k8s-sensor")
 		viper.SetConfigType("yaml")
+		viper.SetConfigType("yml")
 		viper.SetConfigName("config")
 	}
-	klog.V(3).Info("Only environment variables starting with ER_K8S_SENSOR_ will be collected")
+
+	if err := viper.ReadInConfig(); err != nil {
+		klog.V(1).ErrorS(err, "failed to read config file")
+	} else {
+		klog.V(2).Infof("Using config file: %s", viper.ConfigFileUsed())
+	}
+
+	klog.V(3).Info("Only environment variables starting with ER_K8S_ will be collected")
 	viper.AllowEmptyEnv(false)
-	viper.SetEnvPrefix("ER_K8S_SENSOR")
+	viper.SetEnvPrefix("ER_K8S")
 	viper.AutomaticEnv()
+
 	if err := viper.ReadInConfig(); err == nil {
 		klog.V(1).Info("Using config file: ", viper.ConfigFileUsed())
 	} else {
 		klog.V(1).ErrorS(err, "failed to read config file. skipping config collection from files")
 	}
+
 	if verbosity != 0 {
 		viper.Set("logVerbosity", verbosity)
 	}
+
 	var config *Config
 	err := viper.Unmarshal(&config)
 	if err != nil {
