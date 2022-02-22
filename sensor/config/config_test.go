@@ -6,7 +6,8 @@ import (
 )
 
 var config string = `---
-sensorNamespace: test
+sensorNamespace: test-env
+executorType: script
 `
 
 var homeConfig string = `---
@@ -41,8 +42,8 @@ func TestConfigFileCollectionFromDefaultLocations(t *testing.T) {
 func TestConfigCollectionOrderAndParsing(t *testing.T) {
 	os.WriteFile("/tmp/config.yaml", []byte(config), 0644)
 	defer os.Remove("/tmp/config.yaml")
-	os.Setenv("ER_K8S_SENSOR_EXECUTORTYPE", "script")
-	os.Setenv("ER_K8S_SENSOR_NAMESPACE", "test-env")
+	
+	os.Setenv("ER_K8S_SENSORNAMESPACE", "test")
 	configObj, err := ParseConfigFromViper("/tmp/config.yaml", 1)
 	if err != nil {
 		t.Fatalf("Error parsing config: %v", err)
