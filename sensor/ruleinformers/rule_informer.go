@@ -89,7 +89,6 @@ func (rif *RuleInformerFactory) CreateRuleInformer(rule *rules.Rule) *RuleInform
 		nsInformers = make([]informers.GenericInformer, 0, 1)
 		nsInformers = append(nsInformers, createNsInformer(metav1.NamespaceAll))
 	} else {
-		fmt.Println("came4")
 		for _, ns := range rule.Namespaces {
 			nsInformers = append(nsInformers, createNsInformer(ns))
 		}
@@ -220,7 +219,6 @@ func (ri *RuleInformer) Start() {
 	wg := &sync.WaitGroup{}
 	wg.Add(len(ri.namespaceInformers))
 	for _, nsInf := range ri.namespaceInformers {
-		fmt.Println("came3")
 		go func(nsInformer informers.GenericInformer) {
 			wg.Done()
 			nsInformer.Informer().Run(ri.stopChan)

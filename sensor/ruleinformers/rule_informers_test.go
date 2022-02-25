@@ -3,7 +3,6 @@ package ruleinformers
 import (
 	"context"
 	"errors"
-	"fmt"
 	"testing"
 	"time"
 
@@ -13,7 +12,10 @@ import (
 	"github.com/luqmanMohammed/eventsrunner-k8s-sensor/utils"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
+	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	clientapiextv1 "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset/typed/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
@@ -31,7 +33,6 @@ func checkIfObjectExistsInQueue(retry int, eventQueue *eventqueue.EventQueue, se
 		if eventQueue.Len() > 0 {
 			item, shutdown := eventQueue.Get()
 			event := item.(*eventqueue.Event)
-			fmt.Println(event.Objects[0].GetName())
 			if event.Objects[0].GetName() == searchObject.GetName() &&
 				event.Objects[0].GetNamespace() == searchObject.GetNamespace() {
 				if eventType == rules.NONE {
@@ -124,6 +125,10 @@ func TestInformerWithNamespacedResources(t *testing.T) {
 
 	for !ruleInformer.stateStarted {
 		time.Sleep(1 * time.Second)
+	}
+
+	if len(ruleInformer.namespaceInformers) != 1 {
+		t.Errorf("Expected 1 namespace informer, got %d", len(ruleInformer.namespaceInformers))
 	}
 
 	pod := &v1.Pod{
@@ -389,7 +394,7 @@ func TestEnqueueOnlyOnSpecificK8sObjSubsetUpdate(t *testing.T) {
 		kubernetes.NewForConfigOrDie(restConfig).AppsV1().Deployments(ns.Name).Delete(context.Background(), deployment.Name, metav1.DeleteOptions{})
 	}()
 
-	switch checkIfObjectExistsInQueue(5, ruleInformerFactory.queue, deployment, rules.ADDED) {
+	switch checkIfObjectExistsInQueue(2, ruleInformerFactory.queue, deployment, rules.ADDED) {
 	case nil:
 		t.Fatalf("Deployment %s ADDED event should not be added to queue", deployment.Name)
 	}
@@ -413,12 +418,12 @@ var nsFilter = rules.Rule{
 		Version:  "v1",
 		Resource: "pods",
 	},
-	EventTypes: []rules.EventType{rules.ADDED, rules.MODIFIED, rules.ADDED},
+	EventTypes: []rules.EventType{rules.ADDED, rules.ADDED},
 	Namespaces: []string{"kube-system"},
 	Namespaced: true,
 }
 
-func TestNamespaceFilter(t *testing.T) {
+func TestEventsOnlyFromConfiguredNamesapcesAreAdded(t *testing.T) {
 	ruleInformerFactory := setupInformerFactory()
 	filterRuleInformer := ruleInformerFactory.CreateRuleInformer(&nsFilter)
 	go filterRuleInformer.Start()
@@ -446,9 +451,146 @@ func TestNamespaceFilter(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create pod: %v", err)
 	}
-	switch checkIfObjectExistsInQueue(5, ruleInformerFactory.queue, pod, rules.ADDED) {
+	switch checkIfObjectExistsInQueue(3, ruleInformerFactory.queue, pod, rules.ADDED) {
 	case nil:
 		t.Fatalf("Pod %s ADDED event should not be added to queue", pod.Name)
 	}
 }
 
+// Confirm informer is working with custom resources
+var rulesCustom = rules.Rule{
+
+	ID: "test-rule-1",
+	GroupVersionResource: schema.GroupVersionResource{
+		Group:    "k8ser.io",
+		Version:  "v1",
+		Resource: "ercrds",
+	},
+	Namespaces: []string{"default"},
+	EventTypes: []rules.EventType{rules.ADDED, rules.MODIFIED},
+	Namespaced: true,
+}
+
+func TestInformerIsWorkingWithCRDs(t *testing.T) {
+
+	ruleInformerFactory := setupInformerFactory()
+	crdInformer := ruleInformerFactory.CreateRuleInformer(&rulesCustom)
+
+	crd := apiextv1.CustomResourceDefinition{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "ercrds.k8ser.io",
+		},
+		Spec: apiextv1.CustomResourceDefinitionSpec{
+			Group: "k8ser.io",
+			Scope: apiextv1.NamespaceScoped,
+			Names: apiextv1.CustomResourceDefinitionNames{
+				Plural:   "ercrds",
+				Singular: "ercrd",
+				Kind:     "Ercrd",
+			},
+			Versions: []apiextv1.CustomResourceDefinitionVersion{
+				{
+					Name:    "v1",
+					Served:  true,
+					Storage: true,
+					Schema: &apiextv1.CustomResourceValidation{
+						OpenAPIV3Schema: &apiextv1.JSONSchemaProps{
+							Type: "object",
+							Properties: map[string]apiextv1.JSONSchemaProps{
+								"spec": {
+									Type: "string",
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	defer func() {
+		clientapiextv1.NewForConfigOrDie(restConfig).CustomResourceDefinitions().Delete(context.Background(), crd.Name, metav1.DeleteOptions{})
+	}()
+
+	if _, err := clientapiextv1.NewForConfigOrDie(restConfig).CustomResourceDefinitions().Create(context.Background(), &crd, metav1.CreateOptions{}); err != nil {
+		t.Fatalf("Failed to create CRD: %v", err)
+	}
+
+	time.Sleep(3 * time.Second)
+
+	go crdInformer.Start()
+	for !crdInformer.stateStarted {
+		time.Sleep(1 * time.Second)
+	}
+
+	crdGVR := schema.GroupVersionResource{
+		Group:    "k8ser.io",
+		Version:  "v1",
+		Resource: "ercrds",
+	}
+
+	client := dynamic.NewForConfigOrDie(restConfig)
+	crdObj := unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"kind":       "Ercrd",
+			"apiVersion": "k8ser.io/v1",
+			"metadata": map[string]interface{}{
+				"name":      "test-er-crd",
+				"namespace": "default",
+			},
+			"spec": "test-spec",
+		},
+	}
+	res := client.Resource(crdGVR).Namespace("default")
+	crdInst, err := res.Create(context.Background(), &crdObj, metav1.CreateOptions{})
+	if err != nil {
+		t.Fatalf("Failed to create CRD instance: %v", err)
+	}
+	switch checkIfObjectExistsInQueue(10, ruleInformerFactory.queue, crdInst, rules.ADDED) {
+	case errNotFound:
+		t.Fatal("CRD instance for ADD event not found in queue")
+	case errTimeout:
+		t.Fatal("Timeout waiting for CRD instance ADD event to be added to queue")
+	}
+	crdInst.Object["spec"] = "test-spec-modified"
+	updatedCrdInst, err := res.Update(context.Background(), crdInst, metav1.UpdateOptions{})
+	if err != nil {
+		t.Fatalf("Failed to update CRD instance: %v", err)
+	}
+	switch checkIfObjectExistsInQueue(10, ruleInformerFactory.queue, updatedCrdInst, rules.MODIFIED) {
+	case errNotFound:
+		t.Error("CRD instance for MODIFIED event not found in queue")
+	case errTimeout:
+		t.Error("Timeout waiting for CRD instance MODIFIED event to be added to queue")
+	}
+}
+
+// Confirm that informer is not adding events from objects added before informer start
+var rulePreStart = rules.Rule{
+	ID: "test-rule-1",
+	GroupVersionResource: schema.GroupVersionResource{
+		Group:    "",
+		Version:  "v1",
+		Resource: "namespaces",
+	},
+	Namespaced: false,
+	EventTypes: []rules.EventType{rules.ADDED},
+}
+
+func TestObjectsCreatedBeforeInformerStartAreNotAdded(t *testing.T) {
+	ruleInformerFactory := setupInformerFactory()
+	preStartInformer := ruleInformerFactory.CreateRuleInformer(&rulePreStart)
+	go preStartInformer.Start()
+	for !preStartInformer.stateStarted {
+		time.Sleep(1 * time.Second)
+	}
+	ns := &v1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "kube-system",
+		},
+	}
+	switch checkIfObjectExistsInQueue(3, ruleInformerFactory.queue, ns, rules.ADDED) {
+	case nil:
+		t.Errorf("Namespace should not be added")
+	}
+}
