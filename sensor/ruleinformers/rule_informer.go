@@ -61,7 +61,7 @@ func (rif *RuleInformerFactory) CreateRuleInformer(rule *rules.Rule) *RuleInform
 
 	ruleStopChan := make(chan struct{})
 	ruleInformer := &RuleInformer{
-		Rule:              rule,
+		rule:              rule,
 		stopChan:          ruleStopChan,
 		InformerStartTime: time.Now().Local(),
 	}
@@ -206,7 +206,7 @@ func (rif *RuleInformerFactory) deleteFuncWrapper(rule *rules.Rule) func(obj int
 // Closing the stopChan channel will stop the informer which prevents
 // events for the specific rule from being collected.
 type RuleInformer struct {
-	Rule               *rules.Rule
+	rule               *rules.Rule
 	InformerStartTime  time.Time
 	namespaceInformers []informers.GenericInformer
 	stopChan           chan struct{}
