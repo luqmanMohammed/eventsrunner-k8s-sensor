@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"context"
 	"errors"
-	"fmt"
 	"io/ioutil"
 	"os"
 	"testing"
@@ -152,7 +151,6 @@ func checkIfObjectExistsInQueue(retry int, sensor *Sensor, searchObject metav1.O
 		if sensor.queue.Len() > 0 {
 			item, shutdown := sensor.queue.Get()
 			event := item.(*eventqueue.Event)
-			fmt.Println(event.Objects[0].GetName())
 			if event.Objects[0].GetName() == searchObject.GetName() &&
 				event.Objects[0].GetNamespace() == searchObject.GetNamespace() {
 				if eventType == rules.NONE {

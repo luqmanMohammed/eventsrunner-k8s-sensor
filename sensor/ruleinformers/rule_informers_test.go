@@ -3,6 +3,7 @@ package ruleinformers
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -63,6 +64,17 @@ func setupInformerFactory() *RuleInformerFactory {
 	return NewRuleInformerFactory(dynamicClientSet, "test-sensor", queue)
 }
 
+func setupRuleInformer(rule rules.Rule, informerCount int) *RuleInformerFactory {
+	informerFactory := setupInformerFactory()
+	ruleInformer := informerFactory.CreateRuleInformer(&rule)
+	ruleInformer.Start()
+	time.Sleep(1 * time.Second)
+	if len(ruleInformer.namespaceInformers) != informerCount {
+		panic(fmt.Sprintf("Expected %d namespace informers, got %d", informerCount, len(ruleInformer.namespaceInformers)))
+	}
+	return informerFactory
+}
+
 // Confirm informer is working with non namespace resources
 var ruleNonNamespaced = rules.Rule{
 	ID: "test-rule-1",
@@ -76,17 +88,11 @@ var ruleNonNamespaced = rules.Rule{
 }
 
 func TestInformerWithNonNamespacedResources(t *testing.T) {
-	ruleInformerFactory := setupInformerFactory()
-	ruleInformer := ruleInformerFactory.CreateRuleInformer(&ruleNonNamespaced)
-	go ruleInformer.Start()
-
-	for !ruleInformer.stateStarted {
-		time.Sleep(1 * time.Second)
-	}
+	ruleInformerFactory := setupRuleInformer(ruleNonNamespaced, 1)
 
 	ns := &v1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "test-namespace",
+			Name: "inf-test-ns-1",
 		},
 	}
 
@@ -98,7 +104,7 @@ func TestInformerWithNonNamespacedResources(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create namespace: %v", err)
 	}
-	switch checkIfObjectExistsInQueue(30, ruleInformerFactory.queue, nsObj, rules.ADDED) {
+	switch checkIfObjectExistsInQueue(10, ruleInformerFactory.queue, nsObj, rules.ADDED) {
 	case errNotFound:
 		t.Error("Namespace not found in queue")
 	case errTimeout:
@@ -119,21 +125,11 @@ var ruleNamespaced = rules.Rule{
 }
 
 func TestInformerWithNamespacedResources(t *testing.T) {
-	ruleInformerFactory := setupInformerFactory()
-	ruleInformer := ruleInformerFactory.CreateRuleInformer(&ruleNamespaced)
-	go ruleInformer.Start()
-
-	for !ruleInformer.stateStarted {
-		time.Sleep(1 * time.Second)
-	}
-
-	if len(ruleInformer.namespaceInformers) != 1 {
-		t.Errorf("Expected 1 namespace informer, got %d", len(ruleInformer.namespaceInformers))
-	}
+	ruleInformerFactory := setupRuleInformer(ruleNamespaced, 1)
 
 	pod := &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-pod",
+			Name:      "inf-test-pod-1",
 			Namespace: "default",
 		},
 		Spec: v1.PodSpec{
@@ -170,7 +166,7 @@ var ruleMultiNamespaced = rules.Rule{
 		Version:  "v1",
 		Resource: "pods",
 	},
-	Namespaces: []string{"default", "eventsrunner"},
+	Namespaces: []string{"default", "inf-test-ns-2"},
 	Namespaced: true,
 	EventTypes: []rules.EventType{rules.ADDED, rules.MODIFIED, rules.DELETED},
 }
@@ -179,7 +175,7 @@ func TestInformerWithMultiNamespacedResources(t *testing.T) {
 
 	ns := &v1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "eventsrunner",
+			Name: "inf-test-ns-2",
 		},
 	}
 
@@ -192,21 +188,11 @@ func TestInformerWithMultiNamespacedResources(t *testing.T) {
 		t.Fatalf("Failed to create namespace: %v", err)
 	}
 
-	ruleInformerFactory := setupInformerFactory()
-	ruleInformer := ruleInformerFactory.CreateRuleInformer(&ruleMultiNamespaced)
-	go ruleInformer.Start()
-
-	for !ruleInformer.stateStarted {
-		time.Sleep(1 * time.Second)
-	}
-
-	if len(ruleInformer.namespaceInformers) != 2 {
-		t.Fatalf("Expected 2 namespace informers, got %d", len(ruleInformer.namespaceInformers))
-	}
+	ruleInformerFactory := setupRuleInformer(ruleMultiNamespaced, 2)
 
 	pod := &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-pod",
+			Name:      "inf-test-pod-2",
 			Namespace: "default",
 		},
 		Spec: v1.PodSpec{
@@ -229,9 +215,9 @@ func TestInformerWithMultiNamespacedResources(t *testing.T) {
 	}
 	switch checkIfObjectExistsInQueue(10, ruleInformerFactory.queue, podObj, rules.ADDED) {
 	case errNotFound:
-		t.Error("Namespace not found in queue")
+		t.Error("Pod not found in queue")
 	case errTimeout:
-		t.Error("Timeout waiting for Namespace to be added to queue")
+		t.Error("Timeout waiting for pod to be added to queue")
 	}
 }
 
@@ -249,16 +235,11 @@ var rulesEventListenerDynamic = rules.Rule{
 
 func TestOnlyConfiguredEventListenerIsAdded(t *testing.T) {
 
-	ruleInformerFactory := setupInformerFactory()
-	ruleInformer := ruleInformerFactory.CreateRuleInformer(&rulesEventListenerDynamic)
-	go ruleInformer.Start()
-	for !ruleInformer.stateStarted {
-		time.Sleep(1 * time.Second)
-	}
+	ruleInformerFactory := setupRuleInformer(rulesEventListenerDynamic, 1)
 
 	ns := &v1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "test-namespace-2",
+			Name: "inf-test-ns-3",
 		},
 	}
 
@@ -284,9 +265,9 @@ func TestOnlyConfiguredEventListenerIsAdded(t *testing.T) {
 	}
 	switch checkIfObjectExistsInQueue(30, ruleInformerFactory.queue, nsObj, rules.MODIFIED) {
 	case errNotFound:
-		t.Errorf("Namespace %s MODIFIED event not found in queue", ns.Name)
+		t.Fatalf("Namespace %s MODIFIED event not found in queue", ns.Name)
 	case errTimeout:
-		t.Errorf("Timeout waiting for Namespace %s MODIFIED event to be added to queue", ns.Name)
+		t.Fatalf("Timeout waiting for Namespace %s MODIFIED event to be added to queue", ns.Name)
 	}
 }
 
@@ -316,21 +297,18 @@ var depObjSubsetUpdate = rules.Rule{
 }
 
 func TestEnqueueOnlyOnSpecificK8sObjSubsetUpdate(t *testing.T) {
-	ruleInformerFactory := setupInformerFactory()
-	nsRuleInformer := ruleInformerFactory.CreateRuleInformer(&nsObjSubsetUpdate)
-	go nsRuleInformer.Start()
-	for !nsRuleInformer.stateStarted {
-		time.Sleep(1 * time.Second)
-	}
+	ruleInformerFactory := setupRuleInformer(nsObjSubsetUpdate, 1)
+
 	depRuleInformer := ruleInformerFactory.CreateRuleInformer(&depObjSubsetUpdate)
-	go depRuleInformer.Start()
-	for !depRuleInformer.stateStarted {
-		time.Sleep(1 * time.Second)
-	}
+	depRuleInformer.Start()
+
+	time.Sleep(500 * time.Millisecond)
+
+	defer depRuleInformer.Stop()
 
 	ns := &v1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "test-namespace-3",
+			Name: "inf-test-ns-4",
 		},
 	}
 
@@ -350,14 +328,14 @@ func TestEnqueueOnlyOnSpecificK8sObjSubsetUpdate(t *testing.T) {
 	}
 	switch checkIfObjectExistsInQueue(5, ruleInformerFactory.queue, nsObj, rules.MODIFIED) {
 	case nil:
-		t.Errorf("Namespace %s Metadata MODIFIED event should not be added to queue", ns.Name)
+		t.Fatalf("Namespace %s Metadata MODIFIED event should not be added to queue", ns.Name)
 	}
 
 	replicas := int32(1)
 	// Create test deployment
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "test-deployment-2",
+			Name: "inf-test-dep-1",
 		},
 		Spec: appsv1.DeploymentSpec{
 			Replicas: &replicas,
@@ -368,7 +346,7 @@ func TestEnqueueOnlyOnSpecificK8sObjSubsetUpdate(t *testing.T) {
 			},
 			Template: v1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: "test-pod-2",
+					Name: "inf-test-dep-1-pod",
 					Labels: map[string]string{
 						"test-label": "test-value",
 					},
@@ -406,7 +384,7 @@ func TestEnqueueOnlyOnSpecificK8sObjSubsetUpdate(t *testing.T) {
 	}
 	switch checkIfObjectExistsInQueue(5, ruleInformerFactory.queue, deploymentObj, rules.MODIFIED) {
 	case errNotFound, errTimeout:
-		t.Errorf("Deployment %s MODIFIED event not found in queue", deployment.Name)
+		t.Fatalf("Deployment %s MODIFIED event not found in queue", deployment.Name)
 	}
 }
 
@@ -424,15 +402,10 @@ var nsFilter = rules.Rule{
 }
 
 func TestEventsOnlyFromConfiguredNamesapcesAreAdded(t *testing.T) {
-	ruleInformerFactory := setupInformerFactory()
-	filterRuleInformer := ruleInformerFactory.CreateRuleInformer(&nsFilter)
-	go filterRuleInformer.Start()
-	for !filterRuleInformer.stateStarted {
-		time.Sleep(1 * time.Second)
-	}
+	ruleInformerFactory := setupRuleInformer(nsFilter, 1)
 	pod := &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-pod-1",
+			Name:      "inf-test-pod-3",
 			Namespace: "default",
 		},
 		Spec: v1.PodSpec{
@@ -472,9 +445,6 @@ var rulesCustom = rules.Rule{
 }
 
 func TestInformerIsWorkingWithCRDs(t *testing.T) {
-
-	ruleInformerFactory := setupInformerFactory()
-	crdInformer := ruleInformerFactory.CreateRuleInformer(&rulesCustom)
 
 	crd := apiextv1.CustomResourceDefinition{
 		ObjectMeta: metav1.ObjectMeta{
@@ -516,12 +486,9 @@ func TestInformerIsWorkingWithCRDs(t *testing.T) {
 		t.Fatalf("Failed to create CRD: %v", err)
 	}
 
-	time.Sleep(3 * time.Second)
+	time.Sleep(1 * time.Second)
 
-	go crdInformer.Start()
-	for !crdInformer.stateStarted {
-		time.Sleep(1 * time.Second)
-	}
+	ruleInformerFactory := setupRuleInformer(rulesCustom, 1)
 
 	crdGVR := schema.GroupVersionResource{
 		Group:    "k8ser.io",
@@ -578,12 +545,8 @@ var rulePreStart = rules.Rule{
 }
 
 func TestObjectsCreatedBeforeInformerStartAreNotAdded(t *testing.T) {
-	ruleInformerFactory := setupInformerFactory()
-	preStartInformer := ruleInformerFactory.CreateRuleInformer(&rulePreStart)
-	go preStartInformer.Start()
-	for !preStartInformer.stateStarted {
-		time.Sleep(1 * time.Second)
-	}
+	ruleInformerFactory := setupRuleInformer(rulePreStart, 1)
+
 	ns := &v1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "kube-system",
@@ -591,6 +554,6 @@ func TestObjectsCreatedBeforeInformerStartAreNotAdded(t *testing.T) {
 	}
 	switch checkIfObjectExistsInQueue(3, ruleInformerFactory.queue, ns, rules.ADDED) {
 	case nil:
-		t.Errorf("Namespace should not be added")
+		t.Fatalf("Namespace should not be added")
 	}
 }

@@ -63,7 +63,7 @@ func (rif *RuleInformerFactory) CreateRuleInformer(rule *rules.Rule) *RuleInform
 	ruleInformer := &RuleInformer{
 		Rule:              rule,
 		stopChan:          ruleStopChan,
-		InformerStartTime: time.Now().Local(),
+		InformerStartTime: time.Now().Local().Truncate(time.Second),
 	}
 
 	createNsInformer := func(ns string) informers.GenericInformer {
@@ -89,6 +89,7 @@ func (rif *RuleInformerFactory) CreateRuleInformer(rule *rules.Rule) *RuleInform
 		nsInformers = make([]informers.GenericInformer, 0, 1)
 		nsInformers = append(nsInformers, createNsInformer(metav1.NamespaceAll))
 	} else {
+		nsInformers = make([]informers.GenericInformer, 0, len(rule.Namespaces))
 		for _, ns := range rule.Namespaces {
 			nsInformers = append(nsInformers, createNsInformer(ns))
 		}
@@ -210,25 +211,35 @@ type RuleInformer struct {
 	InformerStartTime  time.Time
 	namespaceInformers []informers.GenericInformer
 	stopChan           chan struct{}
-	stateStarted       bool
+	ready              bool
+	sensorReadyLock    sync.RWMutex
 }
 
-// Start starts the informer for the rule.
+// start starts the informer for the rule.
 // It will start all relevant kubernetes informers in all configured namespaces.
-func (ri *RuleInformer) Start() {
+func (ri *RuleInformer) start(readyChan chan struct{}) {
 	wg := &sync.WaitGroup{}
 	wg.Add(len(ri.namespaceInformers))
 	for _, nsInf := range ri.namespaceInformers {
 		go func(nsInformer informers.GenericInformer) {
-			wg.Done()
 			nsInformer.Informer().Run(ri.stopChan)
+			wg.Done()
 		}(nsInf)
 	}
-	ri.stateStarted = true
+	readyChan <- struct{}{}
 	wg.Wait()
 }
 
 // Stop stops the informer for the rule.
 func (ri *RuleInformer) Stop() {
 	close(ri.stopChan)
+}
+
+// Start starts the informer for the rule.
+// It will start all relevant kubernetes informers in all configured namespaces.
+// It will block until the informer is ready.
+func (ri *RuleInformer) Start() {
+	readyChan := make(chan struct{})
+	go ri.start(readyChan)
+	<-readyChan
 }

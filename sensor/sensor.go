@@ -167,7 +167,7 @@ func (s *Sensor) Start(sensorRules map[rules.RuleID]*rules.Rule) error {
 
 	for ruleID, rule := range sensorRules {
 		ruleInformer := s.ruleInformerFactory.CreateRuleInformer(rule)
-		go ruleInformer.Start()
+		ruleInformer.Start()
 		s.ruleInformers[ruleID] = ruleInformer
 	}
 	s.state = RUNNING
