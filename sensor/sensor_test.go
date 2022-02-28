@@ -296,6 +296,9 @@ func TestWorkerPoolIntegration(t *testing.T) {
 	for i := 0; i < 5; i++ {
 		time.Sleep(time.Second)
 		if len(mockExec.events) > 0 {
+			for _, event := range mockExec.events {
+				t.Log(event.EventType, event.Objects[0].GetObjectKind().GroupVersionKind().Kind, event.Objects[0].GetNamespace(), event.Objects[0].GetName())
+			}
 			t.Fatalf("Sensor should not process old objects")
 		}
 	}
