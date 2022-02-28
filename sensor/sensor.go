@@ -160,6 +160,7 @@ func (s *Sensor) Start(sensorRules map[rules.RuleID]*rules.Rule) error {
 	if s.state != INIT && s.state != STOPPED {
 		err := &InvalidSensorStateError{s.state, []State{INIT, STOPPED}}
 		klog.V(1).ErrorS(err, "Unable to start sensor")
+		s.sensorLock.Unlock()
 		return err
 	}
 	klog.V(1).Info("Starting sensor")
@@ -221,12 +222,12 @@ type Runtime struct {
 func SetupNewSensorRuntime(sensorConfig *config.Config) (*Runtime, error) {
 	kubeConfig, err := utils.GetKubeAPIConfig(sensorConfig.KubeConfigPath)
 	if err != nil {
-		klog.V(2).ErrorS(err, "Error when try to create kube config")
+		klog.V(2).ErrorS(err, "Error when trying to create kube config")
 		return nil, err
 	}
 	kubeClient, err := kubernetes.NewForConfig(kubeConfig)
 	if err != nil {
-		klog.V(2).ErrorS(err, "Error when try to create kube client")
+		klog.V(2).ErrorS(err, "Error when trying to create kube client")
 		return nil, err
 	}
 	ruleCollector := collector.NewConfigMapRuleCollector(kubeClient, sensorConfig.SensorNamespace, sensorConfig.SensorRuleConfigMapLabel)

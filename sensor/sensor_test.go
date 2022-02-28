@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io/ioutil"
 	"os"
+	"syscall"
 	"testing"
 	"time"
 
@@ -176,9 +177,19 @@ func TestSensorStart(t *testing.T) {
 	sensor := setupSensor()
 	go sensor.Start(rulesBasic)
 	defer sensor.Stop()
-	time.Sleep(3 * time.Second)
+	time.Sleep(1 * time.Second)
 	if len(sensor.ruleInformers) != 1 {
 		t.Error("Failed to start sensor")
+	}
+	err := sensor.Start(rulesBasic)
+	if err == nil {
+		t.Error("Failed to detect duplicate sensor start")
+	} else {
+		invalidState := err.(*InvalidSensorStateError)
+		t.Log(invalidState.Error())
+		if invalidState.state != RUNNING {
+			t.Error("Failed to detect duplicate sensor start")
+		}
 	}
 }
 
@@ -277,6 +288,23 @@ func (mqe *mockQueueExecutor) Execute(event *eventqueue.Event) error {
 	return nil
 }
 
+var rulesBasicReload = map[rules.RuleID]*rules.Rule{
+	"test-rule-1": {
+		ID: "test-rule-1",
+		GroupVersionResource: schema.GroupVersionResource{
+			Group:    "",
+			Version:  "v1",
+			Resource: "pods",
+		},
+		EventTypes: []rules.EventType{rules.ADDED, rules.MODIFIED, rules.DELETED},
+		Namespaces: []string{"default"},
+		Namespaced: true,
+		Filter: rules.Filter{
+			LabelFilter: "test-label=test-value",
+		},
+	},
+}
+
 func TestWorkerPoolIntegration(t *testing.T) {
 	config := utils.GetKubeAPIConfigOrDie("")
 	mockExec := &mockQueueExecutor{}
@@ -291,22 +319,31 @@ func TestWorkerPoolIntegration(t *testing.T) {
 	}, mockExec)
 	go sensor.StartSensorAndWorkerPool(rulesBasic)
 	waitStartSensor(t, sensor, rulesBasic, 10)
-
+	startTime := sensor.ruleInformers["test-rule-1"].InformerStartTime
+	t.Logf("Informer Start Time: %s", startTime)
 	// make sure the sensor dint process any old objects
 	for i := 0; i < 5; i++ {
 		time.Sleep(time.Second)
 		if len(mockExec.events) > 0 {
 			for _, event := range mockExec.events {
-				t.Log(event.EventType, event.Objects[0].GetObjectKind().GroupVersionKind().Kind, event.Objects[0].GetNamespace(), event.Objects[0].GetName())
+				t.Log(event.EventType, event.Objects[0].GetObjectKind().GroupVersionKind().Kind, event.Objects[0].GetNamespace(), event.Objects[0].GetName(), event.Objects[0].GetCreationTimestamp())
+				if event.EventType == rules.ADDED && event.Objects[0].GetCreationTimestamp().After(startTime) {
+					t.Fatalf("Sensor should not process old objects")
+				}
 			}
-			t.Fatalf("Sensor should not process old objects")
 		}
 	}
+
+	sensor.ReloadRules(rulesBasicReload)
+	waitStartSensor(t, sensor, rulesBasicReload, 10)
 
 	pod := &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "int-test-pod-1",
 			Namespace: "default",
+			Labels: map[string]string{
+				"test-label": "test-value",
+			},
 		},
 		Spec: v1.PodSpec{
 			Containers: []v1.Container{
@@ -333,7 +370,7 @@ func TestWorkerPoolIntegration(t *testing.T) {
 		if tries == 5 {
 			t.Fatalf("Pod %s ADDED event not executed", pod.Name)
 		}
-		if len(mockExec.events) > 1 {
+		if len(mockExec.events) > 0 {
 			for _, event := range mockExec.events {
 				if event.Objects[0].GetUID() == podObj.GetUID() {
 					breakFlag = true
@@ -478,13 +515,17 @@ func TestSensorTotalIntegration(t *testing.T) {
 
 	// Setup Sensor
 	sensorRuntime, err := SetupNewSensorRuntime(configObj)
-	defer sensorRuntime.StopSensorRuntime()
 	handleErr(err)
 	go func() {
 		err := sensorRuntime.StartSensorRuntime()
 		if err != nil {
 			panic(err)
 		}
+	}()
+
+	go sensorRuntime.StopOnSignal()
+	defer func() {
+		syscall.Kill(syscall.Getpid(), syscall.SIGINT)
 	}()
 
 	// Make sure sensor is running before continuing

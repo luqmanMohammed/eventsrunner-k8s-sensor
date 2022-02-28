@@ -242,4 +242,5 @@ func (ri *RuleInformer) Start() {
 	readyChan := make(chan struct{})
 	go ri.start(readyChan)
 	<-readyChan
+	close(readyChan)
 }

@@ -223,11 +223,13 @@ func TestInformerWithMultiNamespacedResources(t *testing.T) {
 
 // Confirm only the registered event types are handled
 var rulesEventListenerDynamic = rules.Rule{
-
 	GroupVersionResource: schema.GroupVersionResource{
 		Group:    "",
 		Version:  "v1",
 		Resource: "namespaces",
+	},
+	Filter: rules.Filter{
+		LabelFilter: "inf-test-label=true",
 	},
 	EventTypes: []rules.EventType{rules.MODIFIED},
 	Namespaced: false,
@@ -240,6 +242,9 @@ func TestOnlyConfiguredEventListenerIsAdded(t *testing.T) {
 	ns := &v1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "inf-test-ns-3",
+			Labels: map[string]string{
+				"inf-test-label": "true",
+			},
 		},
 	}
 
@@ -257,7 +262,8 @@ func TestOnlyConfiguredEventListenerIsAdded(t *testing.T) {
 		t.Fatalf("Namespace %s ADDED event should not be added to queue", ns.Name)
 	}
 	ns.ObjectMeta.Labels = map[string]string{
-		"test-label": "test-value",
+		"test-label":     "test-value",
+		"inf-test-label": "true",
 	}
 	nsObj, err = kubernetes.NewForConfigOrDie(restConfig).CoreV1().Namespaces().Update(context.Background(), ns, metav1.UpdateOptions{})
 	if err != nil {
