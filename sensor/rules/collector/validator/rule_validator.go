@@ -106,6 +106,7 @@ func normalizeAndValidateRule(rule rules.Rule, serverResources map[string][]meta
 						rule.Namespaces = []string{}
 						klog.V(2).Infof("Resource in rule %s is not namespaced. Removing namespaces", rule.ID)
 					} else {
+						rule.Namespaced = true
 						rule.Namespaces = normalizeNamespaces(rule.Namespaces)
 					}
 				}
