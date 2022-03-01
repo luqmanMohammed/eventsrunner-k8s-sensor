@@ -50,6 +50,11 @@ const (
 	STOPPED
 )
 
+// String returns the string representation of the sensor state.
+func (s State) String() string {
+	return [...]string{"INIT", "STARTING", "RUNNING", "STOPPING", "STOPPED"}[s]
+}
+
 // Opts holds options related to sensor configuration
 // - KubConfig : kubernetes config
 // - EventQueueOpts : event queue options. Refer eventqueue.EventQueueOpts
