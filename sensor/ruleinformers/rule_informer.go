@@ -236,6 +236,6 @@ func (ri *RuleInformer) Start() {
 
 // Stop stops the informer for the rule.
 func (ri *RuleInformer) Stop() {
-	klog.V(3).Infof("Informer for rule %v stopped", ri.Rule.ID)
 	close(ri.stopChan)
+	klog.V(3).Infof("Informer for rule %v stopped", ri.Rule.ID)
 }
