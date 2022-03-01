@@ -128,7 +128,8 @@ func newJWTClient(erClientOpts *EventsRunnerClientOpts, tryMTLS bool, httpsEndpo
 		if err != nil {
 			klog.V(2).Infof("TLS config was provided but failed to create: %v", err)
 		}
-	} else if httpsEndpoint {
+	}
+	if httpsEndpoint && tlsConfig == nil {
 		klog.V(2).Info("Endpoint identified to be HTTPS, CA cert path is required")
 		var err error
 		tlsConfig, err = createTLSConfig(erClientOpts.CaCertPath, "", "")
@@ -158,6 +159,9 @@ func newJWTClient(erClientOpts *EventsRunnerClientOpts, tryMTLS bool, httpsEndpo
 // if JWT authentication is used.
 // Check EventsRunnerClientOpts for each authentication methods requirements.
 func New(authType AuthType, erClientOpts *EventsRunnerClientOpts) (*EventsRunnerClient, error) {
+	if erClientOpts == nil {
+		return nil, &config.RequiredConfigMissingError{ConfigName: "all events runner client options"}
+	}
 	mTLSRequirementsErr := config.AnyRequestedConfigMissing(map[string]interface{}{
 		"CaCertPath":     erClientOpts.CaCertPath,
 		"ClientKeyPath":  erClientOpts.ClientKeyPath,
@@ -208,7 +212,7 @@ func (er EventsRunnerClient) ProcessEvent(event *eventqueue.Event) error {
 		return err
 	}
 	requestURI := fmt.Sprintf("%s/api/v1/events", er.eventsRunnerBaseURL)
-	req, err := http.NewRequest("POST", requestURI, bytes.NewBuffer(eventJSON))
+	req, err := http.NewRequest(http.MethodPost, requestURI, bytes.NewBuffer(eventJSON))
 	if err != nil {
 		klog.V(3).ErrorS(err, "Failed to create request")
 		return err
