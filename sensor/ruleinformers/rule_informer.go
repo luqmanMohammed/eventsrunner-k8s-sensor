@@ -3,7 +3,6 @@ package ruleinformers
 import (
 	"fmt"
 	"reflect"
-	"sync"
 	"time"
 
 	"github.com/luqmanMohammed/eventsrunner-k8s-sensor/sensor/eventqueue"
@@ -75,7 +74,10 @@ func (rif *RuleInformerFactory) CreateRuleInformer(rule *rules.Rule) *RuleInform
 			indexers,
 			tweakFunction,
 		)
-		klog.V(1).Infof("Registering event handler for rule %v", rule.ID)
+		if ns == "" {
+			ns = "all"
+		}
+		klog.V(3).Infof("Registering event handler for rule %v for namespace %s", rule.ID, ns)
 		nsInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
 			AddFunc:    rif.addFuncWrapper(rule, ruleInformer.InformerStartTime),
 			UpdateFunc: rif.updateFuncWrapper(rule),
@@ -211,36 +213,29 @@ type RuleInformer struct {
 	InformerStartTime  time.Time
 	namespaceInformers []informers.GenericInformer
 	stopChan           chan struct{}
-	ready              bool
-	sensorReadyLock    sync.RWMutex
 }
 
-// start starts the informer for the rule.
+// Start starts the informer for the rule.
 // It will start all relevant kubernetes informers in all configured namespaces.
-func (ri *RuleInformer) start(readyChan chan struct{}) {
-	wg := &sync.WaitGroup{}
-	wg.Add(len(ri.namespaceInformers))
+// Blocks until all informer caches are synced.
+// Closing the stopChan channel by calling the Stop function will all the informers.
+func (ri *RuleInformer) Start() {
+	klog.V(3).Infof("Starting informer for rule %v", ri.Rule.ID)
 	for _, nsInf := range ri.namespaceInformers {
-		go func(nsInformer informers.GenericInformer) {
-			nsInformer.Informer().Run(ri.stopChan)
-			wg.Done()
-		}(nsInf)
+		go nsInf.Informer().Run(ri.stopChan)
 	}
-	readyChan <- struct{}{}
-	wg.Wait()
+	informersHasSynced := make([]cache.InformerSynced, 0, len(ri.namespaceInformers))
+	for _, informer := range ri.namespaceInformers {
+		informersHasSynced = append(informersHasSynced, informer.Informer().HasSynced)
+	}
+	if !cache.WaitForCacheSync(ri.stopChan, informersHasSynced...) {
+		klog.V(1).Infof("Error occurred while waiting for informers to sync for rule %v", ri.Rule.ID)
+	}
+	klog.V(3).Infof("Informer for rule %v started", ri.Rule.ID)
 }
 
 // Stop stops the informer for the rule.
 func (ri *RuleInformer) Stop() {
 	close(ri.stopChan)
-}
-
-// Start starts the informer for the rule.
-// It will start all relevant kubernetes informers in all configured namespaces.
-// It will block until the informer is ready.
-func (ri *RuleInformer) Start() {
-	readyChan := make(chan struct{})
-	go ri.start(readyChan)
-	<-readyChan
-	close(readyChan)
+	klog.V(3).Infof("Informer for rule %v stopped", ri.Rule.ID)
 }

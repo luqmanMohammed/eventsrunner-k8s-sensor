@@ -71,7 +71,7 @@ TBA
 
 >[Viper](https://github.com/spf13/viper) is used to manage sensor configuration.
 
-Sensor configuration will be collected from the following > sources in the following order:
+Sensor configuration will be collected from the following sources in the following order:
 
 1. Defaults
 2. Configuration file
