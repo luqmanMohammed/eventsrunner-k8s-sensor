@@ -32,9 +32,9 @@ jobs:
     strategy:
       matrix:
         k3s_k8s_image:
-          - "rancher/k3s:v1.23.4-k3s1"
-          - "rancher/k3s:v1.22.7-k3s1"
-          - "rancher/k3s:v1.21.10-k3s1"
+          - 'rancher/k3s:v1.23.4-k3s1'
+          - 'rancher/k3s:v1.22.7-k3s1'
+          - 'rancher/k3s:v1.21.10-k3s1'
       fail-fast: false
     steps:
       - uses: actions/checkout@v2
@@ -59,7 +59,7 @@ jobs:
         run: go test -v ./... -coverprofile coverage.out
       - name: Codecov
         uses: codecov/codecov-action@v2.1.0
-        if: ${{ matrix.k3s_k8s_image == "rancher/k3s:v1.23.4-k3s1" }}
+        if: ${{ matrix.k3s_k8s_image == 'rancher/k3s:v1.23.4-k3s1' }}
         with:
           files: coverage.out
           fail_ci_if_error: true
