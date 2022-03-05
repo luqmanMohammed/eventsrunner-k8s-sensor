@@ -27,7 +27,7 @@ jobs:
       - name: Build
         run: go build ./...
 
-  test:
+  unit-tests:
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -86,7 +86,11 @@ jobs:
         run: docker images
       - name: Upload Docker Image to K8s Cluster
         run: k3d image import -c cluster ${{ secrets.DOCKERHUB_USERNAME }}/eventsrunner-k8s-sensor:${{ github.sha }}
-
+      - uses: actions/setup-go@v2
+        with:
+          go-version: ${{ env.go_version }}
+      - name: Run tests
+        run: go test -v ./integration/... 
   refresh-go-report:
     runs-on: ubuntu-latest
     if: ${{ github.ref_name == 'main' }}
