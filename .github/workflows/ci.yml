@@ -84,14 +84,14 @@ jobs:
         with:
           cluster-name: cluster
           args: >-
-            --image=rancher/k3s:v1.23.4-k3s1
+            --image='rancher/k3s:v1.23.4-k3s1'
             --agents=1
       - name: Upload Docker Image to K8s Cluster
         run: k3d image import -c cluster ${{ secrets.DOCKERHUB_USERNAME }}/eventsrunner-k8s-sensor:${{ github.sha }}
 
   refresh-go-report:
     runs-on: ubuntu-latest
-    if: ${{ github.ref_name == "main" }}
+    if: ${{ github.ref_name == 'main' }}
     steps:
       - name: Refresh Go Report
         uses: creekorful/goreportcard-action@v1.0
