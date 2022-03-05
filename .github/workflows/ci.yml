@@ -90,7 +90,7 @@ jobs:
         with:
           go-version: ${{ env.go_version }}
       - name: Run tests
-        run: go test -v ./integration/... 
+        run: go test -v ./integration-tests/... 
   refresh-go-report:
     runs-on: ubuntu-latest
     if: ${{ github.ref_name == 'main' }}
