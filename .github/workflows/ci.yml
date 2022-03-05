@@ -5,9 +5,6 @@ on:
 
 env:
   go_version: 1.17
-  k8s_test_image_1: rancher/k3s:v1.23.4-k3s1
-  k8s_test_image_2: rancher/k3s:v1.22.7-k3s1
-  k8s_test_image_3: rancher/k3s:v1.21.10-k3s1
 
 jobs:
   build:
@@ -28,15 +25,23 @@ jobs:
       - name: Build
         run: go build ./...
 
-  test:
+  get-test-images:
     needs: build
+    runs-on: ubuntu-latest
+    outputs:
+      images: ${{ steps.get_test_images.outputs.images }}
+    steps:
+      - uses: actions/checkout@v2
+      - run: ls -lR .
+      - id: get-test-image
+        run: echo "::set-output name=images::${cat .github/k8s_test_images.json}"
+
+  test:
+    needs: get-test-images
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        k3s_k8s_image:
-          - "${{ env.k8s_test_image_1 }}"
-          - "${{ env.k8s_test_image_2 }}"
-          - "${{ env.k8s_test_image_3 }}"
+        k3s_k8s_image: ${{ fromJSON(needs.get-test-images.ouputs.images) }}
       fail-fast: false
     steps:
       - uses: actions/checkout@v2
@@ -61,7 +66,7 @@ jobs:
         run: go test -v ./... -coverprofile coverage.out
       - name: Codecov
         uses: codecov/codecov-action@v2.1.0
-        if: ${{ matrix.k8s_k8s_image == env.k8s_test_image_1 }}
+        if: ${{ matrix.k8s_k8s_image == "" }}
         with:
           files: coverage.out
           fail_ci_if_error: true
