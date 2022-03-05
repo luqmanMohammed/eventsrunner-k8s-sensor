@@ -2,6 +2,8 @@ name: ci
 on:
   pull_request:
     branches: [main, develop]
+  push:
+    branches: [main]  
 
 env:
   go_version: 1.17
@@ -25,26 +27,14 @@ jobs:
       - name: Build
         run: go build ./...
 
-  get-test-images:
-    needs: build
-    runs-on: ubuntu-latest
-    outputs:
-      images: ${{ steps.get_test_images.outputs.images }}
-    steps:
-      - uses: actions/checkout@v2
-      - run: ls -alR .
-      - id: get-test-image
-        run: |
-          JSON=$(cat .github/k8s_test_images.json)
-          echo "::set-output name=images::${JSON//'%'/'%25'}"
-      - run: echo ${{ steps.get_test_images.outputs.images }}
-
   test:
-    needs: get-test-images
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        k3s_k8s_image: ${{ fromJSON(needs.get-test-images.ouputs.images) }}
+        k3s_k8s_image:
+          - "rancher/k3s:v1.23.4-k3s1"
+          - "rancher/k3s:v1.22.7-k3s1"
+          - "rancher/k3s:v1.21.10-k3s1"
       fail-fast: false
     steps:
       - uses: actions/checkout@v2
@@ -69,6 +59,7 @@ jobs:
         run: go test -v ./... -coverprofile coverage.out
       - name: Codecov
         uses: codecov/codecov-action@v2.1.0
+        if: ${{ matrix.k3s_k8s_image == "rancher/k3s:v1.23.4-k3s1" }}
         with:
           files: coverage.out
           fail_ci_if_error: true
@@ -93,8 +84,14 @@ jobs:
         with:
           cluster-name: cluster
           args: >-
-            --image=${{ env.k8s_test_image_1 }}
+            --image=rancher/k3s:v1.23.4-k3s1
             --agents=1
       - name: Upload Docker Image to K8s Cluster
         run: k3d image import -c cluster ${{ secrets.DOCKERHUB_USERNAME }}/eventsrunner-k8s-sensor:${{ github.sha }}
 
+  refresh-go-report:
+    runs-on: ubuntu-latest
+    if: ${{ github.ref_name == "main" }}
+    steps:
+      - name: Refresh Go Report
+        uses: creekorful/goreportcard-action@v1.0
