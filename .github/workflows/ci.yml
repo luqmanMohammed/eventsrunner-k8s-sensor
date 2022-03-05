@@ -86,6 +86,8 @@ jobs:
           args: >-
             --image='rancher/k3s:v1.23.4-k3s1'
             --agents=1
+      - name: Docker images
+        run: docker images
       - name: Upload Docker Image to K8s Cluster
         run: k3d image import -c cluster ${{ secrets.DOCKERHUB_USERNAME }}/eventsrunner-k8s-sensor:${{ github.sha }}
 
