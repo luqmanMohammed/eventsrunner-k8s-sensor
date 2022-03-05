@@ -34,7 +34,8 @@ jobs:
       - uses: actions/checkout@v2
       - run: ls -alR .
       - id: get-test-image
-        run: echo "::set-output name=images::$(cat .github/k8s_test_images.json)"
+        run: echo "::set-output name=images::\"$(cat .github/k8s_test_images.json)\""
+      - run: echo ${{ steps.get_test_images.outputs.images }}
 
   test:
     needs: get-test-images
