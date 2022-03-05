@@ -34,9 +34,9 @@ jobs:
     strategy:
       matrix:
         k3s_k8s_image:
-          - ${{ env.k8s_test_image_1 }}
-          - ${{ env.k8s_test_image_2 }}
-          - ${{ env.k8s_test_image_3 }}
+          - "${{ env.k8s_test_image_1 }}"
+          - "${{ env.k8s_test_image_2 }}"
+          - "${{ env.k8s_test_image_3 }}"
       fail-fast: false
     steps:
       - uses: actions/checkout@v2
