@@ -180,10 +180,6 @@ var sensorDeployment = appsv1.Deployment{
 	},
 }
 
-func TestMockServer(t *testing.T) {
-	PrepareAndRunJWTBasedMockServer()
-}
-
 func TestIntegration(t *testing.T) {
 
 	if os.Getenv("INT_TEST") != "true" {
