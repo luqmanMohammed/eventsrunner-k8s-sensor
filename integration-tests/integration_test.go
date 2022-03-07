@@ -26,6 +26,8 @@ import (
 
 var cmRuleCount, secretsRuleCount = new(int32), new(int32)
 
+var RESOURCE_COUNT = 100
+
 func PrepareAndRunJWTBasedMockServer() {
 	mockServerMux := http.NewServeMux()
 	mockServerMux.HandleFunc("/api/v1/events", func(w http.ResponseWriter, r *http.Request) {
@@ -121,7 +123,7 @@ func WaitForDeploymentToBeReady(t *testing.T, kubeClient *kubernetes.Clientset, 
 	t.Fatalf("deployment %s is not ready", deploymentName)
 }
 
-func PrintSensorResourceUsage(config *rest.Config) error {
+func PrintSensorResourceUsage(config *rest.Config, readyChan chan struct{}) error {
 	metricsClient, err := metricsv.NewForConfig(config)
 	if err != nil {
 		return err
@@ -133,6 +135,9 @@ func PrintSensorResourceUsage(config *rest.Config) error {
 		if err != nil {
 			return err
 		}
+		if len(metricsList.Items) != 0 {
+			close(readyChan)
+		}
 		for _, podMetric := range metricsList.Items {
 			memory, _ := podMetric.Containers[0].Usage.Memory().AsScale(resource.Mega)
 			cpuUsage, _ := podMetric.Containers[0].Usage.Cpu().AsScale(resource.Milli)
@@ -140,7 +145,7 @@ func PrintSensorResourceUsage(config *rest.Config) error {
 			cpuUsageMilli, _ := cpuUsage.AsCanonicalBytes(nil)
 			fmt.Printf("CPU Usage: %sm\t Memory Usage: %sMi\n", string(cpuUsageMilli), string(memoryMB))
 		}
-		time.Sleep(time.Second * 5)
+		time.Sleep(time.Second * 1)
 	}
 	return nil
 }
@@ -261,15 +266,23 @@ func TestIntegration(t *testing.T) {
 	// Wait for deployment to be ready
 	WaitForDeploymentToBeReady(t, clientSet, "eventsrunner", deployment.Name, 30)
 
+	metricsReadyChan := make(chan struct{})
 	go func() {
-		if err := PrintSensorResourceUsage(kubeconfig); err != nil {
+		if err := PrintSensorResourceUsage(kubeconfig, metricsReadyChan); err != nil {
 			panic(err)
 		}
 	}()
 
+	select {
+	case <-metricsReadyChan:
+		t.Log("Metrics are ready")
+	case <-time.After(time.Second * 30):
+		t.Fatalf("failed to initialize sensor resource usage")
+	}
+
 	cmDone, secretDone := make(chan struct{}), make(chan struct{})
 	go func(done chan struct{}) {
-		for i := 0; i < 10; i++ {
+		for i := 0; i < RESOURCE_COUNT; i++ {
 			// Create configmap
 			testCM := v1.ConfigMap{
 				ObjectMeta: metav1.ObjectMeta{
@@ -288,7 +301,7 @@ func TestIntegration(t *testing.T) {
 	}(cmDone)
 
 	go func(done chan struct{}) {
-		for i := 0; i < 10; i++ {
+		for i := 0; i < RESOURCE_COUNT; i++ {
 			testSecret := v1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "secret-" + strconv.Itoa(i),
@@ -310,11 +323,11 @@ func TestIntegration(t *testing.T) {
 
 	time.Sleep(time.Second * 30)
 
-	if *cmRuleCount != 10 {
+	if *cmRuleCount != int32(RESOURCE_COUNT) {
 		t.Fatalf("expected 10 configmaps, got %d", *cmRuleCount)
 	}
 
-	if *secretsRuleCount != 10 {
+	if *secretsRuleCount != int32(RESOURCE_COUNT) {
 		t.Fatalf("expected 10 secrets, got %d", *secretsRuleCount)
 	}
 }
