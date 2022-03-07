@@ -137,7 +137,7 @@ func PrintSensorResourceUsage(config *rest.Config, readyChan chan struct{}) erro
 			return err
 		}
 		if !ready && len(metricsList.Items) != 0 {
-			readyChan <- struct{}
+			readyChan <- struct{}{}
 			ready = true
 		}
 		for _, podMetric := range metricsList.Items {
