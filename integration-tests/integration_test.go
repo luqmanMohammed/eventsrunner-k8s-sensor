@@ -128,6 +128,7 @@ func PrintSensorResourceUsage(config *rest.Config, readyChan chan struct{}) erro
 	if err != nil {
 		return err
 	}
+	closed := false
 	for true {
 		metricsList, err := metricsClient.MetricsV1beta1().PodMetricses("eventsrunner").List(context.Background(), metav1.ListOptions{
 			LabelSelector: "app=eventsrunner-k8s-sensor",
@@ -135,15 +136,16 @@ func PrintSensorResourceUsage(config *rest.Config, readyChan chan struct{}) erro
 		if err != nil {
 			return err
 		}
-		if len(metricsList.Items) != 0 {
+		if !closed && len(metricsList.Items) != 0 {
 			close(readyChan)
+			closed = true
 		}
 		for _, podMetric := range metricsList.Items {
 			memory, _ := podMetric.Containers[0].Usage.Memory().AsScale(resource.Mega)
 			cpuUsage, _ := podMetric.Containers[0].Usage.Cpu().AsScale(resource.Milli)
 			memoryMB, _ := memory.AsCanonicalBytes(nil)
 			cpuUsageMilli, _ := cpuUsage.AsCanonicalBytes(nil)
-			fmt.Printf("CPU Usage: %sm\t Memory Usage: %sMi\n", string(cpuUsageMilli), string(memoryMB))
+			fmt.Printf("Metrics CPU Usage: %sm\t Memory Usage: %sMi\n", string(cpuUsageMilli), string(memoryMB))
 		}
 		time.Sleep(time.Second * 1)
 	}
