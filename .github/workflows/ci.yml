@@ -105,8 +105,16 @@ jobs:
       - uses: actions/setup-go@v2
         with:
           go-version: ${{ env.go_version }}
+      - uses: actions/cache@v2
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
       - name: Run tests
-        run: go test -v ./integration-tests/... 
+        run: IMAGE_TAG=${{ github.sha }} INT_TEST="true" go test -v ./integration-tests/... 
 
   refresh-go-report:
     runs-on: ubuntu-latest
