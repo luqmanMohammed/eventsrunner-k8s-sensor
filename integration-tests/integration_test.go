@@ -29,30 +29,31 @@ var cmRuleCount, secretsRuleCount = new(int32), new(int32)
 func PrepareAndRunJWTBasedMockServer() {
 	mockServerMux := http.NewServeMux()
 	mockServerMux.HandleFunc("/api/v1/events", func(w http.ResponseWriter, r *http.Request) {
-		fmt.Println("Came")
 		if r.Method == http.MethodPost {
-			fmt.Println("Request received")
 			if r.Header.Get("Authorization") == "Bearer test-token" {
 				bodyMap := make(map[string]interface{})
 				err := json.NewDecoder(r.Body).Decode(&bodyMap)
 				if err != nil {
+					fmt.Println("Error decoding request body")
 					w.WriteHeader(http.StatusBadRequest)
 					return
 				}
 				ruleIDInt, ok := bodyMap["ruleId"]
 				if !ok {
+					fmt.Println("No ruleId in request")
 					w.WriteHeader(http.StatusBadRequest)
 					return
 				}
 				ruleID := ruleIDInt.(string)
 				if ruleID == "cm-rule-1" {
+					fmt.Println("ConfigMap Added")
 					atomic.AddInt32(cmRuleCount, 1)
-				}
-				if ruleID == "secrets-rule-1" {
+				} else if ruleID == "secrets-rule-1" {
+					fmt.Println("Secrets Added")
 					atomic.AddInt32(secretsRuleCount, 1)
 				}
 				fmt.Println("Rule ID:", ruleID)
-				w.WriteHeader(http.StatusCreated)
+				w.WriteHeader(http.StatusOK)
 			} else {
 				fmt.Println("Invalid token")
 				w.WriteHeader(http.StatusUnauthorized)
@@ -266,23 +267,54 @@ func TestIntegration(t *testing.T) {
 		}
 	}()
 
-	for i := 0; i < 10; i++ {
-		// Create configmap
-		testCM := v1.ConfigMap{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "cm-" + strconv.Itoa(i),
-				Namespace: "k8s-sensor-int-test-ns",
-			},
-			Data: map[string]string{},
+	cmDone, secretDone := make(chan struct{}), make(chan struct{})
+	go func(done chan struct{}) {
+		for i := 0; i < 10; i++ {
+			// Create configmap
+			testCM := v1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "cm-" + strconv.Itoa(i),
+					Namespace: "k8s-sensor-int-test-ns",
+				},
+				Data: map[string]string{},
+			}
+			_, err = clientSet.CoreV1().ConfigMaps("k8s-sensor-int-test-ns").Create(context.Background(), &testCM, metav1.CreateOptions{})
+			if err != nil {
+				fmt.Printf("failed to create configmap: %v\n", err)
+			}
+			time.Sleep(time.Millisecond * 100)
 		}
-		_, err = clientSet.CoreV1().ConfigMaps("k8s-sensor-int-test-ns").Create(context.Background(), &testCM, metav1.CreateOptions{})
-		if err != nil {
-			t.Fatalf("failed to create config map: %v", err)
+		close(done)
+	}(cmDone)
+
+	go func(done chan struct{}) {
+		for i := 0; i < 10; i++ {
+			testSecret := v1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "secret-" + strconv.Itoa(i),
+					Namespace: "k8s-sensor-int-test-ns",
+				},
+				Data: map[string][]byte{},
+			}
+			_, err = clientSet.CoreV1().Secrets("k8s-sensor-int-test-ns").Create(context.Background(), &testSecret, metav1.CreateOptions{})
+			if err != nil {
+				fmt.Printf("failed to create secret: %v\n", err)
+			}
+			time.Sleep(time.Millisecond * 100)
 		}
-		time.Sleep(time.Second)
-	}
-	time.Sleep(time.Second * 300)
+		close(done)
+	}(secretDone)
+
+	<-cmDone
+	<-secretDone
+
+	time.Sleep(time.Second * 30)
+
 	if *cmRuleCount != 10 {
-		t.Fatalf("expected 10 configmaps, got %d", cmRuleCount)
+		t.Fatalf("expected 10 configmaps, got %d", *cmRuleCount)
+	}
+
+	if *secretsRuleCount != 10 {
+		t.Fatalf("expected 10 secrets, got %d", *secretsRuleCount)
 	}
 }
