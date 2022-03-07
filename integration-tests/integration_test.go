@@ -65,7 +65,7 @@ func PrepareAndRunJWTBasedMockServer() {
 		}
 	})
 	server := &http.Server{
-		Addr:    "172.17.212.162:9090",
+		Addr:    ":9090",
 		Handler: mockServerMux,
 	}
 	if err := server.ListenAndServe(); err != nil {
