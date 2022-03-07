@@ -38,7 +38,7 @@ func PrepareAndRunJWTBasedMockServer() {
 					w.WriteHeader(http.StatusBadRequest)
 					return
 				}
-				ruleIDInt, ok := bodyMap["ruleId"]
+				ruleIDInt, ok := bodyMap["ruleID"]
 				if !ok {
 					fmt.Println("No ruleId in request")
 					w.WriteHeader(http.StatusBadRequest)
