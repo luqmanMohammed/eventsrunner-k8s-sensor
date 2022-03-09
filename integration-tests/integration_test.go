@@ -131,6 +131,7 @@ func CollectSensorResourceUsage(config *rest.Config, readyChan chan struct{}, st
 		return err
 	}
 	ready := false
+	breakLoop := false
 	for true {
 		metricsList, err := metricsClient.MetricsV1beta1().PodMetricses("eventsrunner").List(context.Background(), metav1.ListOptions{
 			LabelSelector: "app=eventsrunner-k8s-sensor",
@@ -138,7 +139,6 @@ func CollectSensorResourceUsage(config *rest.Config, readyChan chan struct{}, st
 		if err != nil {
 			return err
 		}
-		fmt.Printf("Metrics count: %d\n", len(metricsList.Items))
 		if !ready && len(metricsList.Items) != 0 {
 			readyChan <- struct{}{}
 			ready = true
@@ -152,14 +152,18 @@ func CollectSensorResourceUsage(config *rest.Config, readyChan chan struct{}, st
 			cpuUsageMilliInt, _ := strconv.Atoi(string(cpuUsageMilli))
 			memoryMC = append(memoryMC, memoryMBInt)
 			cpuMC = append(cpuMC, cpuUsageMilliInt)
+			fmt.Printf("Memory: %v, CPU: %v\n", memoryMB, cpuUsage)
 			fmt.Printf("Metrics CPU Usage: %dm\t Memory Usage: %dMi\n", cpuUsageMilliInt, memoryMBInt)
 		}
 		select {
 		case <-stopChan:
 			fmt.Println("Stopping sensor resource usage collection")
-			break
+			breakLoop = true
 		default:
 			time.Sleep(time.Second)
+		}
+		if breakLoop {
+			break
 		}
 	}
 	avgMem, avgCPU := 0, 0
@@ -354,9 +358,9 @@ func TestIntegration(t *testing.T) {
 
 	<-cmDone
 	<-secretDone
-
 	metricsStopChan <- struct{}{}
-	time.Sleep(time.Second * 30)
+
+	time.Sleep(time.Second * 15)
 
 	if *cmRuleCount != int32(RESOURCE_COUNT) {
 		t.Fatalf("expected 10 configmaps, got %d", *cmRuleCount)
