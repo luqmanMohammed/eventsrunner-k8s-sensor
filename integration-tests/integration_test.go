@@ -26,7 +26,7 @@ import (
 
 var cmRuleCount, secretsRuleCount = new(int32), new(int32)
 
-var RESOURCE_COUNT = 100
+const RESOURCE_COUNT = 100
 
 func PrepareAndRunJWTBasedMockServer() {
 	mockServerMux := http.NewServeMux()
@@ -123,12 +123,15 @@ func WaitForDeploymentToBeReady(t *testing.T, kubeClient *kubernetes.Clientset, 
 	t.Fatalf("deployment %s is not ready", deploymentName)
 }
 
-func PrintSensorResourceUsage(config *rest.Config, readyChan chan struct{}) error {
+var cpuMC, memoryMC = make([]int, 0), make([]int, 0)
+
+func CollectSensorResourceUsage(config *rest.Config, readyChan chan struct{}, stopChan chan struct{}) error {
 	metricsClient, err := metricsv.NewForConfig(config)
 	if err != nil {
 		return err
 	}
 	ready := false
+	breakLoop := false
 	for true {
 		metricsList, err := metricsClient.MetricsV1beta1().PodMetricses("eventsrunner").List(context.Background(), metav1.ListOptions{
 			LabelSelector: "app=eventsrunner-k8s-sensor",
@@ -145,10 +148,42 @@ func PrintSensorResourceUsage(config *rest.Config, readyChan chan struct{}) erro
 			cpuUsage, _ := podMetric.Containers[0].Usage.Cpu().AsScale(resource.Milli)
 			memoryMB, _ := memory.AsCanonicalBytes(nil)
 			cpuUsageMilli, _ := cpuUsage.AsCanonicalBytes(nil)
-			fmt.Printf("Metrics CPU Usage: %sm\t Memory Usage: %sMi\n", string(cpuUsageMilli), string(memoryMB))
+			memoryMBInt, _ := strconv.Atoi(string(memoryMB))
+			cpuUsageMilliInt, _ := strconv.Atoi(string(cpuUsageMilli))
+			memoryMC = append(memoryMC, memoryMBInt)
+			cpuMC = append(cpuMC, cpuUsageMilliInt)
+			fmt.Printf("Memory: %v, CPU: %v\n", memoryMB, cpuUsage)
+			fmt.Printf("Metrics CPU Usage: %dm\t Memory Usage: %dMi\n", cpuUsageMilliInt, memoryMBInt)
 		}
-		time.Sleep(time.Second * 1)
+		select {
+		case <-stopChan:
+			fmt.Println("Stopping sensor resource usage collection")
+			breakLoop = true
+		default:
+			time.Sleep(time.Second)
+		}
+		if breakLoop {
+			break
+		}
 	}
+	avgMem, avgCPU := 0, 0
+	maxCPU, maxMem := 0, 0
+	for _, mem := range memoryMC {
+		if mem > maxMem {
+			maxMem = mem
+		}
+		avgMem += mem
+	}
+	for _, cpu := range cpuMC {
+		if cpu > maxCPU {
+			maxCPU = cpu
+		}
+		avgCPU += cpu
+	}
+	avgMem = avgMem / len(memoryMC)
+	avgCPU = avgCPU / len(cpuMC)
+	fmt.Printf("Average Metrics CPU Usage: %dm\t Average Memory Usage: %dMi\n", avgCPU, avgMem)
+	fmt.Printf("Max Metrics CPU Usage: %dm\t Max Memory Usage: %dMi\n", maxCPU, maxMem)
 	return nil
 }
 
@@ -269,8 +304,9 @@ func TestIntegration(t *testing.T) {
 	WaitForDeploymentToBeReady(t, clientSet, "eventsrunner", deployment.Name, 30)
 
 	metricsReadyChan := make(chan struct{})
+	metricsStopChan := make(chan struct{})
 	go func() {
-		if err := PrintSensorResourceUsage(kubeconfig, metricsReadyChan); err != nil {
+		if err := CollectSensorResourceUsage(kubeconfig, metricsReadyChan, metricsStopChan); err != nil {
 			panic(err)
 		}
 	}()
@@ -278,7 +314,7 @@ func TestIntegration(t *testing.T) {
 	select {
 	case <-metricsReadyChan:
 		t.Log("Metrics are ready")
-	case <-time.After(time.Second * 30):
+	case <-time.After(time.Minute * 5):
 		t.Fatalf("failed to initialize sensor resource usage")
 	}
 
@@ -322,8 +358,9 @@ func TestIntegration(t *testing.T) {
 
 	<-cmDone
 	<-secretDone
+	metricsStopChan <- struct{}{}
 
-	time.Sleep(time.Second * 30)
+	time.Sleep(time.Second * 15)
 
 	if *cmRuleCount != int32(RESOURCE_COUNT) {
 		t.Fatalf("expected 10 configmaps, got %d", *cmRuleCount)
