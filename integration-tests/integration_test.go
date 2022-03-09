@@ -138,6 +138,7 @@ func CollectSensorResourceUsage(config *rest.Config, readyChan chan struct{}, st
 		if err != nil {
 			return err
 		}
+		fmt.Printf("Metrics count: %d\n", len(metricsList.Items))
 		if !ready && len(metricsList.Items) != 0 {
 			readyChan <- struct{}{}
 			ready = true
@@ -155,6 +156,7 @@ func CollectSensorResourceUsage(config *rest.Config, readyChan chan struct{}, st
 		}
 		select {
 		case <-stopChan:
+			fmt.Println("Stopping sensor resource usage collection")
 			break
 		default:
 			time.Sleep(time.Second)
