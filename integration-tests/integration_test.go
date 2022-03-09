@@ -310,7 +310,7 @@ func TestIntegration(t *testing.T) {
 	select {
 	case <-metricsReadyChan:
 		t.Log("Metrics are ready")
-	case <-time.After(time.Second * 30):
+	case <-time.After(time.Minute * 5):
 		t.Fatalf("failed to initialize sensor resource usage")
 	}
 
