@@ -24,11 +24,39 @@ import (
 	metricsv "k8s.io/metrics/pkg/client/clientset/versioned"
 )
 
-var cmRuleCount, secretsRuleCount = new(int32), new(int32)
+var (
+	configYaml = `---
+sensorNamespace: eventsrunner
+executorType: eventsrunner
+authType: jwt
+jwtToken: test-token
+requestTimeout: 10s
+`
 
-const resourceCount = 250
+	ruleConfigYaml = `
+[{
+    "id": "cm-rule-1",
+    "group": "",
+    "version": "v1",
+    "resource": "configmaps",
+    "namespaces": ["k8s-sensor-int-test-ns"],
+    "eventTypes": ["ADDED"]
+    },{
+    "id": "secrets-rule-1",
+    "group": "",
+    "version": "v1",
+    "resource": "secrets",
+    "namespaces": ["k8s-sensor-int-test-ns"],
+    "eventTypes": ["ADDED"]
+}]
+`
+	cmRuleCount, secretsRuleCount                   = new(int32), new(int32)
+	cpuTotal, memoryTotal, maxCPU, maxMem, runCount = 0, 0, 0, 0, 0
+)
 
-func PrepareAndRunJWTBasedMockServer() {
+const resourceCount = 500
+
+func prepareAndRunJWTBasedMockServer() {
 	mockServerMux := http.NewServeMux()
 	mockServerMux.HandleFunc("/api/v1/events", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodPost {
@@ -48,13 +76,10 @@ func PrepareAndRunJWTBasedMockServer() {
 				}
 				ruleID := ruleIDInt.(string)
 				if ruleID == "cm-rule-1" {
-					fmt.Println("ConfigMap Added")
 					atomic.AddInt32(cmRuleCount, 1)
 				} else if ruleID == "secrets-rule-1" {
-					fmt.Println("Secrets Added")
 					atomic.AddInt32(secretsRuleCount, 1)
 				}
-				fmt.Println("Rule ID:", ruleID)
 				w.WriteHeader(http.StatusOK)
 			} else {
 				fmt.Println("Invalid token")
@@ -76,7 +101,7 @@ func PrepareAndRunJWTBasedMockServer() {
 	}
 }
 
-func RunShellCommand(t *testing.T, command string) {
+func runShellCommand(t *testing.T, command string) {
 	cmd := exec.Command("bash", "-c", command)
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
@@ -84,7 +109,7 @@ func RunShellCommand(t *testing.T, command string) {
 	}
 }
 
-func GetCurrentEnvIP(t *testing.T) string {
+func getCurrentEnvIP(t *testing.T) string {
 	ifaces, err := net.Interfaces()
 	if err != nil {
 		t.Fatalf("failed to get interfaces: %v", err)
@@ -109,7 +134,7 @@ func GetCurrentEnvIP(t *testing.T) string {
 	return ""
 }
 
-func WaitForDeploymentToBeReady(t *testing.T, kubeClient *kubernetes.Clientset, namespace string, deploymentName string, retry int) {
+func waitForDeploymentToBeReady(t *testing.T, kubeClient *kubernetes.Clientset, namespace string, deploymentName string, retry int) {
 	for i := 0; i < retry; i++ {
 		deployment, err := kubeClient.AppsV1().Deployments(namespace).Get(context.TODO(), deploymentName, metav1.GetOptions{})
 		if err != nil {
@@ -123,9 +148,7 @@ func WaitForDeploymentToBeReady(t *testing.T, kubeClient *kubernetes.Clientset, 
 	t.Fatalf("deployment %s is not ready", deploymentName)
 }
 
-var cpuMC, memoryMC = make([]int, 0), make([]int, 0)
-
-func CollectSensorResourceUsage(config *rest.Config, readyChan chan<- struct{}, stopChan <-chan struct{}) error {
+func collectSensorResourceUsage(config *rest.Config, readyChan chan<- struct{}, stopChan <-chan struct{}) error {
 	metricsClient, err := metricsv.NewForConfig(config)
 	if err != nil {
 		return err
@@ -150,10 +173,18 @@ func CollectSensorResourceUsage(config *rest.Config, readyChan chan<- struct{}, 
 			cpuUsageMilli, _ := cpuUsage.AsCanonicalBytes(nil)
 			memoryMBInt, _ := strconv.Atoi(string(memoryMB))
 			cpuUsageMilliInt, _ := strconv.Atoi(string(cpuUsageMilli))
-			memoryMC = append(memoryMC, memoryMBInt)
-			cpuMC = append(cpuMC, cpuUsageMilliInt)
-			fmt.Printf("Memory: %v, CPU: %v\n", memoryMB, cpuUsage)
-			fmt.Printf("Metrics CPU Usage: %dm\t Memory Usage: %dMi\n", cpuUsageMilliInt, memoryMBInt)
+
+			memoryTotal += memoryMBInt
+			cpuTotal += cpuUsageMilliInt
+
+			if memoryMBInt > maxMem {
+				maxMem = memoryMBInt
+			}
+			if cpuUsageMilliInt > maxCPU {
+				maxCPU = cpuUsageMilliInt
+			}
+
+			fmt.Printf("CPU: %dm | Memory: %dMi\n", cpuUsageMilliInt, memoryMBInt)
 		}
 		select {
 		case <-stopChan:
@@ -166,79 +197,30 @@ func CollectSensorResourceUsage(config *rest.Config, readyChan chan<- struct{}, 
 			break
 		}
 	}
-	avgMem, avgCPU := 0, 0
-	maxCPU, maxMem := 0, 0
-	for _, mem := range memoryMC {
-		if mem > maxMem {
-			maxMem = mem
-		}
-		avgMem += mem
-	}
-	for _, cpu := range cpuMC {
-		if cpu > maxCPU {
-			maxCPU = cpu
-		}
-		avgCPU += cpu
-	}
-	avgMem = avgMem / len(memoryMC)
-	avgCPU = avgCPU / len(cpuMC)
-	fmt.Printf("Average Metrics CPU Usage: %dm\t Average Memory Usage: %dMi\n", avgCPU, avgMem)
-	fmt.Printf("Max Metrics CPU Usage: %dm\t Max Memory Usage: %dMi\n", maxCPU, maxMem)
+	avgMem := memoryTotal / runCount
+	avgCPU := cpuTotal / runCount
+	fmt.Printf("Average CPU: %dm\t Average Memory: %dMi\n", avgCPU, avgMem)
+	fmt.Printf("Max CPU: %dm\t Max Memory Usage: %dMi\n", maxCPU, maxMem)
 	readyChan <- struct{}{}
 	return nil
 }
 
-var configYaml = `---
-sensorNamespace: eventsrunner
-executorType: eventsrunner
-authType: jwt
-jwtToken: test-token
-requestTimeout: 10s
-`
-
-var ruleConfigYaml = `
-[{
-    "id": "cm-rule-1",
-    "group": "",
-    "version": "v1",
-    "resource": "configmaps",
-    "namespaces": ["k8s-sensor-int-test-ns"],
-    "eventTypes": ["ADDED"]
-    },{
-    "id": "secrets-rule-1",
-    "group": "",
-    "version": "v1",
-    "resource": "secrets",
-    "namespaces": ["k8s-sensor-int-test-ns"],
-    "eventTypes": ["ADDED"]
-}]
-`
-
-var sensorDeployment = appsv1.Deployment{
-	ObjectMeta: metav1.ObjectMeta{
-		Name:      "eventsrunner-k8s-sensor",
-		Namespace: "eventsrunner",
-	},
-	Spec: appsv1.DeploymentSpec{
-		Replicas: &[]int32{1}[0],
-	},
-}
-
 func TestIntegration(t *testing.T) {
 
+	// Skip test if INT_TEST flag is not provided
 	if os.Getenv("INT_TEST") != "true" {
 		t.Skip("skipping integration test")
 	}
 
-	go PrepareAndRunJWTBasedMockServer()
+	// Run JWT Based mock server in another routine
+	go prepareAndRunJWTBasedMockServer()
 
 	// Setting up prerequisites
-	RunShellCommand(t, "kubectl create -f prerequisite-k8s-resources.yaml")
-	defer RunShellCommand(t, "kubectl delete -f prerequisite-k8s-resources.yaml")
+	runShellCommand(t, "kubectl create -f prerequisite-k8s-resources.yaml")
+	defer runShellCommand(t, "kubectl delete -f prerequisite-k8s-resources.yaml")
 
 	// Get Test Environment IP
-	ip := GetCurrentEnvIP(t)
-
+	ip := getCurrentEnvIP(t)
 	// Create Config Map setting eventsRunner config
 	configYaml += "eventsRunnerBaseURL: http://" + ip + ":9090"
 	configMap := v1.ConfigMap{
@@ -275,16 +257,15 @@ func TestIntegration(t *testing.T) {
 	}
 	defer clientSet.CoreV1().ConfigMaps("eventsrunner").Delete(context.Background(), rulesConfigYaml.Name, metav1.DeleteOptions{})
 
+	// Get image tag from IMAGE_TAG env. Will be populated by CI
 	imageTag := os.Getenv("IMAGE_TAG")
 	if imageTag == "" {
 		imageTag = "latest"
 	}
 	image := "luqmanmohammed/eventsrunner-k8s-sensor:" + imageTag
 	t.Logf("Running eventsrunner-k8s-sensor with image %s", image)
-
 	// Read deployment template yaml from senor-deployment.yml file
 	var deployment appsv1.Deployment
-
 	deploymentJSON, err := ioutil.ReadFile("sensor-deployment.json")
 	if err != nil {
 		t.Fatalf("failed to read deployment template file: %v", err)
@@ -294,7 +275,6 @@ func TestIntegration(t *testing.T) {
 		t.Fatalf("failed to unmarshal deployment template file: %v", err)
 	}
 	deployment.Spec.Template.Spec.Containers[0].Image = image
-
 	// Create sensor deployment
 	_, err = clientSet.AppsV1().Deployments("eventsrunner").Create(context.Background(), &deployment, metav1.CreateOptions{})
 	if err != nil {
@@ -302,16 +282,16 @@ func TestIntegration(t *testing.T) {
 	}
 	defer clientSet.AppsV1().Deployments("eventsrunner").Delete(context.Background(), deployment.Name, metav1.DeleteOptions{})
 	// Wait for deployment to be ready
-	WaitForDeploymentToBeReady(t, clientSet, "eventsrunner", deployment.Name, 30)
+	waitForDeploymentToBeReady(t, clientSet, "eventsrunner", deployment.Name, 30)
 
+	// Setup monitoring
 	metricsReadyChan := make(chan struct{})
 	metricsStopChan := make(chan struct{})
 	go func() {
-		if err := CollectSensorResourceUsage(kubeconfig, metricsReadyChan, metricsStopChan); err != nil {
+		if err := collectSensorResourceUsage(kubeconfig, metricsReadyChan, metricsStopChan); err != nil {
 			panic(err)
 		}
 	}()
-
 	select {
 	case <-metricsReadyChan:
 		t.Log("Metrics are ready")
@@ -319,6 +299,7 @@ func TestIntegration(t *testing.T) {
 		t.Fatalf("failed to initialize sensor resource usage")
 	}
 
+	// Generate load
 	cmDone, secretDone := make(chan struct{}), make(chan struct{})
 	go func(done chan struct{}) {
 		for i := 0; i < resourceCount; i++ {
@@ -334,11 +315,10 @@ func TestIntegration(t *testing.T) {
 			if err != nil {
 				fmt.Printf("failed to create configmap: %v\n", err)
 			}
-			time.Sleep(time.Millisecond * 50)
+			time.Sleep(time.Millisecond * 25)
 		}
 		close(done)
 	}(cmDone)
-
 	go func(done chan struct{}) {
 		for i := 0; i < resourceCount; i++ {
 			testSecret := v1.Secret{
@@ -352,25 +332,26 @@ func TestIntegration(t *testing.T) {
 			if err != nil {
 				fmt.Printf("failed to create secret: %v\n", err)
 			}
-			time.Sleep(time.Millisecond * 50)
+			time.Sleep(time.Millisecond * 25)
 		}
 		close(done)
 	}(secretDone)
-
+	// Wait for all load to be generated
 	<-cmDone
 	<-secretDone
-	var waitDuration time.Duration = 0
+
+	// Calculate how much time is required extra to finish processing
+	startTime := time.Now()
 	for {
-		time.Sleep(time.Millisecond * 500)
-		waitDuration += time.Millisecond * 500
 		if *cmRuleCount == int32(resourceCount) && *secretsRuleCount == int32(resourceCount) {
-			t.Logf("Sensor processed %d configmaps and %d secrets within %v", resourceCount, resourceCount, waitDuration)
+			spentTime := time.Since(startTime)
+			t.Logf("Sensor processed %d configmaps and %d secrets within %v", resourceCount, resourceCount, spentTime)
 			break
 		}
-		if waitDuration > time.Minute*5 {
-			t.Fatalf("Timed out waiting for sensor to process all resources. Sensor processed %d configmaps and %d secrets", *cmRuleCount, *secretsRuleCount)
+		if time.Since(startTime) > time.Minute*1 {
+			t.Fatalf("Timed out waiting for sensor to process. Total processed %d configmaps and %d secrets", *cmRuleCount, *secretsRuleCount)
 		}
 	}
 	metricsStopChan <- struct{}{}
-	<- metricsReadyChan
+	<-metricsReadyChan
 }
