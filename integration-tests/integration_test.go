@@ -26,7 +26,7 @@ import (
 
 var cmRuleCount, secretsRuleCount = new(int32), new(int32)
 
-const RESOURCE_COUNT = 100
+const resourceCount = 250
 
 func PrepareAndRunJWTBasedMockServer() {
 	mockServerMux := http.NewServeMux()
@@ -125,7 +125,7 @@ func WaitForDeploymentToBeReady(t *testing.T, kubeClient *kubernetes.Clientset, 
 
 var cpuMC, memoryMC = make([]int, 0), make([]int, 0)
 
-func CollectSensorResourceUsage(config *rest.Config, readyChan chan struct{}, stopChan chan struct{}) error {
+func CollectSensorResourceUsage(config *rest.Config, readyChan chan<- struct{}, stopChan <-chan struct{}) error {
 	metricsClient, err := metricsv.NewForConfig(config)
 	if err != nil {
 		return err
@@ -184,6 +184,7 @@ func CollectSensorResourceUsage(config *rest.Config, readyChan chan struct{}, st
 	avgCPU = avgCPU / len(cpuMC)
 	fmt.Printf("Average Metrics CPU Usage: %dm\t Average Memory Usage: %dMi\n", avgCPU, avgMem)
 	fmt.Printf("Max Metrics CPU Usage: %dm\t Max Memory Usage: %dMi\n", maxCPU, maxMem)
+	readyChan <- struct{}{}
 	return nil
 }
 
@@ -320,7 +321,7 @@ func TestIntegration(t *testing.T) {
 
 	cmDone, secretDone := make(chan struct{}), make(chan struct{})
 	go func(done chan struct{}) {
-		for i := 0; i < RESOURCE_COUNT; i++ {
+		for i := 0; i < resourceCount; i++ {
 			// Create configmap
 			testCM := v1.ConfigMap{
 				ObjectMeta: metav1.ObjectMeta{
@@ -333,13 +334,13 @@ func TestIntegration(t *testing.T) {
 			if err != nil {
 				fmt.Printf("failed to create configmap: %v\n", err)
 			}
-			time.Sleep(time.Millisecond * 100)
+			time.Sleep(time.Millisecond * 50)
 		}
 		close(done)
 	}(cmDone)
 
 	go func(done chan struct{}) {
-		for i := 0; i < RESOURCE_COUNT; i++ {
+		for i := 0; i < resourceCount; i++ {
 			testSecret := v1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "secret-" + strconv.Itoa(i),
@@ -351,22 +352,25 @@ func TestIntegration(t *testing.T) {
 			if err != nil {
 				fmt.Printf("failed to create secret: %v\n", err)
 			}
-			time.Sleep(time.Millisecond * 100)
+			time.Sleep(time.Millisecond * 50)
 		}
 		close(done)
 	}(secretDone)
 
 	<-cmDone
 	<-secretDone
+	var waitDuration time.Duration = 0
+	for {
+		time.Sleep(time.Millisecond * 500)
+		waitDuration += time.Millisecond * 500
+		if *cmRuleCount == int32(resourceCount) && *secretsRuleCount == int32(resourceCount) {
+			t.Logf("Sensor processed %d configmaps and %d secrets within %v", resourceCount, resourceCount, waitDuration)
+			break
+		}
+		if waitDuration > time.Minute*5 {
+			t.Fatalf("Timed out waiting for sensor to process all resources. Sensor processed %d configmaps and %d secrets", *cmRuleCount, *secretsRuleCount)
+		}
+	}
 	metricsStopChan <- struct{}{}
-
-	time.Sleep(time.Second * 15)
-
-	if *cmRuleCount != int32(RESOURCE_COUNT) {
-		t.Fatalf("expected 10 configmaps, got %d", *cmRuleCount)
-	}
-
-	if *secretsRuleCount != int32(RESOURCE_COUNT) {
-		t.Fatalf("expected 10 secrets, got %d", *secretsRuleCount)
-	}
+	<- metricsReadyChan
 }
