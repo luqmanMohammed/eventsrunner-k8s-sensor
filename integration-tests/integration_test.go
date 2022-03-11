@@ -24,6 +24,11 @@ import (
 	metricsv "k8s.io/metrics/pkg/client/clientset/versioned"
 )
 
+const (
+	resourceCount = 500
+	interval      = 20 * time.Millisecond
+)
+
 var (
 	configYaml = `---
 sensorNamespace: eventsrunner
@@ -50,13 +55,84 @@ requestTimeout: 10s
     "eventTypes": ["ADDED"]
 }]
 `
-	cmRuleCount, secretsRuleCount                   = new(int32), new(int32)
 	cpuTotal, memoryTotal, maxCPU, maxMem, runCount = 0, 0, 0, 0, 0
+
+	loadGenerators = []*loadGeneratorConfig{
+		{
+			namespace:     "k8s-sensor-int-test-ns",
+			doneChan:      make(chan struct{}),
+			generator:     configMapLoadGenerator,
+			detectedCount: new(int32),
+			ruleID:        "cm-rule-1",
+			count:         resourceCount,
+			interval:      interval,
+		},
+		{
+			namespace:     "k8s-sensor-int-test-ns",
+			doneChan:      make(chan struct{}),
+			generator:     secretLoadGenerator,
+			detectedCount: new(int32),
+			ruleID:        "secrets-rule-1",
+			count:         resourceCount,
+			interval:      interval,
+		},
+	}
 )
 
-const resourceCount = 500
+type loadGeneratorConfig struct {
+	namespace     string
+	doneChan      chan struct{}
+	detectedCount *int32
+	ruleID        string
+	count         int
+	interval      time.Duration
 
-func prepareAndRunJWTBasedMockServer() {
+	generator func(clientSet *kubernetes.Clientset, id, namespace string, count int, interval time.Duration, doneChan chan<- struct{})
+}
+
+func (c *loadGeneratorConfig) incrementDetectedCountIfRule(ruleName string) {
+	if c.ruleID == ruleName {
+		atomic.AddInt32(c.detectedCount, 1)
+	}
+}
+
+func configMapLoadGenerator(clientSet *kubernetes.Clientset, id, namespace string, count int, interval time.Duration, doneChan chan<- struct{}) {
+	for i := 0; i < count; i++ {
+		configMapName := fmt.Sprintf("configmap-%s-%d", id, i)
+		configMap := &v1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      configMapName,
+				Namespace: namespace,
+			},
+		}
+		_, err := clientSet.CoreV1().ConfigMaps(namespace).Create(context.TODO(), configMap, metav1.CreateOptions{})
+		if err != nil {
+			fmt.Printf("failed to create configmap %s: %v\n", configMapName, err)
+		}
+		time.Sleep(interval)
+	}
+	doneChan <- struct{}{}
+}
+
+func secretLoadGenerator(clientSet *kubernetes.Clientset, id, namespace string, count int, interval time.Duration, doneChan chan<- struct{}) {
+	for i := 0; i < count; i++ {
+		secretName := fmt.Sprintf("secret-%s-%d", id, i)
+		secret := &v1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      secretName,
+				Namespace: namespace,
+			},
+		}
+		_, err := clientSet.CoreV1().Secrets(namespace).Create(context.TODO(), secret, metav1.CreateOptions{})
+		if err != nil {
+			fmt.Printf("failed to create secret %s: %v\n", secretName, err)
+		}
+		time.Sleep(interval)
+	}
+	doneChan <- struct{}{}
+}
+
+func prepareAndRunJWTBasedMockServer(lgConfigs []*loadGeneratorConfig) {
 	mockServerMux := http.NewServeMux()
 	mockServerMux.HandleFunc("/api/v1/events", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodPost {
@@ -75,10 +151,8 @@ func prepareAndRunJWTBasedMockServer() {
 					return
 				}
 				ruleID := ruleIDInt.(string)
-				if ruleID == "cm-rule-1" {
-					atomic.AddInt32(cmRuleCount, 1)
-				} else if ruleID == "secrets-rule-1" {
-					atomic.AddInt32(secretsRuleCount, 1)
+				for _, lgConfig := range lgConfigs {
+					lgConfig.incrementDetectedCountIfRule(ruleID)
 				}
 				w.WriteHeader(http.StatusOK)
 			} else {
@@ -176,6 +250,7 @@ func collectSensorResourceUsage(config *rest.Config, readyChan chan<- struct{}, 
 
 			memoryTotal += memoryMBInt
 			cpuTotal += cpuUsageMilliInt
+			runCount++
 
 			if memoryMBInt > maxMem {
 				maxMem = memoryMBInt
@@ -213,7 +288,7 @@ func TestIntegration(t *testing.T) {
 	}
 
 	// Run JWT Based mock server in another routine
-	go prepareAndRunJWTBasedMockServer()
+	go prepareAndRunJWTBasedMockServer(loadGenerators)
 
 	// Setting up prerequisites
 	runShellCommand(t, "kubectl create -f prerequisite-k8s-resources.yaml")
@@ -299,57 +374,33 @@ func TestIntegration(t *testing.T) {
 		t.Fatalf("failed to initialize sensor resource usage")
 	}
 
-	// Generate load
-	cmDone, secretDone := make(chan struct{}), make(chan struct{})
-	go func(done chan struct{}) {
-		for i := 0; i < resourceCount; i++ {
-			// Create configmap
-			testCM := v1.ConfigMap{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "cm-" + strconv.Itoa(i),
-					Namespace: "k8s-sensor-int-test-ns",
-				},
-				Data: map[string]string{},
-			}
-			_, err = clientSet.CoreV1().ConfigMaps("k8s-sensor-int-test-ns").Create(context.Background(), &testCM, metav1.CreateOptions{})
-			if err != nil {
-				fmt.Printf("failed to create configmap: %v\n", err)
-			}
-			time.Sleep(time.Millisecond * 25)
-		}
-		close(done)
-	}(cmDone)
-	go func(done chan struct{}) {
-		for i := 0; i < resourceCount; i++ {
-			testSecret := v1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "secret-" + strconv.Itoa(i),
-					Namespace: "k8s-sensor-int-test-ns",
-				},
-				Data: map[string][]byte{},
-			}
-			_, err = clientSet.CoreV1().Secrets("k8s-sensor-int-test-ns").Create(context.Background(), &testSecret, metav1.CreateOptions{})
-			if err != nil {
-				fmt.Printf("failed to create secret: %v\n", err)
-			}
-			time.Sleep(time.Millisecond * 25)
-		}
-		close(done)
-	}(secretDone)
-	// Wait for all load to be generated
-	<-cmDone
-	<-secretDone
+	for i, config := range loadGenerators {
+		go config.generator(clientSet, strconv.Itoa(i), config.namespace, config.count, config.interval, config.doneChan)
+	}
+
+	for _, config := range loadGenerators {
+		<-config.doneChan
+	}
 
 	// Calculate how much time is required extra to finish processing
 	startTime := time.Now()
+
 	for {
-		if *cmRuleCount == int32(resourceCount) && *secretsRuleCount == int32(resourceCount) {
-			spentTime := time.Since(startTime)
-			t.Logf("Sensor processed %d configmaps and %d secrets within %v", resourceCount, resourceCount, spentTime)
+		processedGenerators := 0
+		proccessedItems := 0
+		for _, config := range loadGenerators {
+			if config.count == int(*config.detectedCount) {
+				processedGenerators++
+				proccessedItems += int(*config.detectedCount)
+			}
+		}
+		if processedGenerators == len(loadGenerators) {
+			t.Logf("All generators processed %d items", proccessedItems)
+			t.Logf("Extra time taken after last event was created %v", time.Since(startTime))
 			break
 		}
 		if time.Since(startTime) > time.Minute*1 {
-			t.Fatalf("Timed out waiting for sensor to process. Total processed %d configmaps and %d secrets", *cmRuleCount, *secretsRuleCount)
+			t.Fatal("Failed to process all events within extra minute")
 		}
 	}
 	metricsStopChan <- struct{}{}
