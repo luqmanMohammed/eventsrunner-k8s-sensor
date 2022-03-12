@@ -26,7 +26,7 @@ import (
 
 const (
 	resourceCount = 500
-	interval      = 20 * time.Millisecond
+	interval      = 10 * time.Millisecond
 )
 
 var (
@@ -53,7 +53,22 @@ requestTimeout: 10s
     "resource": "secrets",
     "namespaces": ["k8s-sensor-int-test-ns"],
     "eventTypes": ["ADDED"]
-}]
+	},{
+	"id": "cm-rule-2",
+	"group": "",
+	"version": "v1",
+	"resource": "configmaps",
+	"namespaces": ["k8s-sensor-int-test-ns-2"],
+	"eventTypes": ["ADDED"]
+	},{
+		"id": "secrets-rule-2",
+		"group": "",
+		"version": "v1",
+		"resource": "secrets",
+		"namespaces": ["k8s-sensor-int-test-ns-2"],
+		"eventTypes": ["ADDED"]
+	}
+]
 `
 	cpuTotal, memoryTotal, maxCPU, maxMem, runCount = 0, 0, 0, 0, 0
 
@@ -73,6 +88,24 @@ requestTimeout: 10s
 			generator:     secretLoadGenerator,
 			detectedCount: new(int32),
 			ruleID:        "secrets-rule-1",
+			count:         resourceCount,
+			interval:      interval,
+		},
+		{
+			namespace:     "k8s-sensor-int-test-ns-2",
+			doneChan:      make(chan struct{}),
+			generator:     configMapLoadGenerator,
+			detectedCount: new(int32),
+			ruleID:        "cm-rule-2",
+			count:         resourceCount,
+			interval:      interval,
+		},
+		{
+			namespace:     "k8s-sensor-int-test-ns-2",
+			doneChan:      make(chan struct{}),
+			generator:     secretLoadGenerator,
+			detectedCount: new(int32),
+			ruleID:        "secrets-rule-2",
 			count:         resourceCount,
 			interval:      interval,
 		},
@@ -374,6 +407,8 @@ func TestIntegration(t *testing.T) {
 		t.Fatalf("failed to initialize sensor resource usage")
 	}
 
+	loadGenStartTime := time.Now()
+
 	for i, config := range loadGenerators {
 		go config.generator(clientSet, strconv.Itoa(i), config.namespace, config.count, config.interval, config.doneChan)
 	}
@@ -381,6 +416,8 @@ func TestIntegration(t *testing.T) {
 	for _, config := range loadGenerators {
 		<-config.doneChan
 	}
+
+	t.Logf("Load generation took %s", time.Since(loadGenStartTime))
 
 	// Calculate how much time is required extra to finish processing
 	startTime := time.Now()
@@ -402,6 +439,7 @@ func TestIntegration(t *testing.T) {
 		if time.Since(startTime) > time.Minute*1 {
 			t.Fatal("Failed to process all events within extra minute")
 		}
+		time.Sleep(time.Millisecond)
 	}
 	metricsStopChan <- struct{}{}
 	<-metricsReadyChan

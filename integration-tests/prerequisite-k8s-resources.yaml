@@ -10,6 +10,12 @@ kind: Namespace
 metadata:
   name: k8s-sensor-int-test-ns
 
+---
+apiVersion: "v1"
+kind: Namespace
+metadata:
+  name: k8s-sensor-int-test-ns-2
+
 # Caution: this cluster role provides access to all resources in the cluster
 # An all-access cluster role is not recommended for production use.
 # This cluster role is intended for testing purposes only.
