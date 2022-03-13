@@ -26,7 +26,7 @@ import (
 
 const (
 	resourceCount = 500
-	interval      = 20 * time.Millisecond
+	interval      = 10 * time.Millisecond
 )
 
 var (
@@ -53,7 +53,22 @@ requestTimeout: 10s
     "resource": "secrets",
     "namespaces": ["k8s-sensor-int-test-ns"],
     "eventTypes": ["ADDED"]
-}]
+	},{
+	"id": "cm-rule-2",
+	"group": "",
+	"version": "v1",
+	"resource": "configmaps",
+	"namespaces": ["k8s-sensor-int-test-ns-2"],
+	"eventTypes": ["ADDED"]
+	},{
+		"id": "secrets-rule-2",
+		"group": "",
+		"version": "v1",
+		"resource": "secrets",
+		"namespaces": ["k8s-sensor-int-test-ns-2"],
+		"eventTypes": ["ADDED"]
+	}
+]
 `
 	cpuTotal, memoryTotal, maxCPU, maxMem, runCount = 0, 0, 0, 0, 0
 
@@ -73,6 +88,24 @@ requestTimeout: 10s
 			generator:     secretLoadGenerator,
 			detectedCount: new(int32),
 			ruleID:        "secrets-rule-1",
+			count:         resourceCount,
+			interval:      interval,
+		},
+		{
+			namespace:     "k8s-sensor-int-test-ns-2",
+			doneChan:      make(chan struct{}),
+			generator:     configMapLoadGenerator,
+			detectedCount: new(int32),
+			ruleID:        "cm-rule-2",
+			count:         resourceCount,
+			interval:      interval,
+		},
+		{
+			namespace:     "k8s-sensor-int-test-ns-2",
+			doneChan:      make(chan struct{}),
+			generator:     secretLoadGenerator,
+			detectedCount: new(int32),
+			ruleID:        "secrets-rule-2",
 			count:         resourceCount,
 			interval:      interval,
 		},
@@ -109,6 +142,7 @@ func configMapLoadGenerator(clientSet *kubernetes.Clientset, id, namespace strin
 		if err != nil {
 			fmt.Printf("failed to create configmap %s: %v\n", configMapName, err)
 		}
+		fmt.Printf("Created configmap: %s\n", configMapName)
 		time.Sleep(interval)
 	}
 	doneChan <- struct{}{}
@@ -127,6 +161,7 @@ func secretLoadGenerator(clientSet *kubernetes.Clientset, id, namespace string, 
 		if err != nil {
 			fmt.Printf("failed to create secret %s: %v\n", secretName, err)
 		}
+		fmt.Printf("Created secret: %s\n", secretName)
 		time.Sleep(interval)
 	}
 	doneChan <- struct{}{}
@@ -374,13 +409,24 @@ func TestIntegration(t *testing.T) {
 		t.Fatalf("failed to initialize sensor resource usage")
 	}
 
+	loadGenStartTime := time.Now()
+
+	concurrency := 20
 	for i, config := range loadGenerators {
-		go config.generator(clientSet, strconv.Itoa(i), config.namespace, config.count, config.interval, config.doneChan)
+		configConcCount := config.count / concurrency
+		config.count = configConcCount * concurrency
+		for j := 0; j < concurrency; j++ {
+			go config.generator(clientSet, fmt.Sprintf("%d-%d", i, j), config.namespace, configConcCount, config.interval, config.doneChan)
+		}
 	}
 
 	for _, config := range loadGenerators {
-		<-config.doneChan
+		for i := 0; i < concurrency; i++ {
+			<-config.doneChan
+		}
 	}
+
+	t.Logf("Load generation took %s", time.Since(loadGenStartTime))
 
 	// Calculate how much time is required extra to finish processing
 	startTime := time.Now()
@@ -402,6 +448,7 @@ func TestIntegration(t *testing.T) {
 		if time.Since(startTime) > time.Minute*1 {
 			t.Fatal("Failed to process all events within extra minute")
 		}
+		time.Sleep(time.Millisecond)
 	}
 	metricsStopChan <- struct{}{}
 	<-metricsReadyChan
