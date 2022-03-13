@@ -142,6 +142,7 @@ func configMapLoadGenerator(clientSet *kubernetes.Clientset, id, namespace strin
 		if err != nil {
 			fmt.Printf("failed to create configmap %s: %v\n", configMapName, err)
 		}
+		fmt.Printf("Created configmap: %s\n", configMapName)
 		time.Sleep(interval)
 	}
 	doneChan <- struct{}{}
@@ -160,6 +161,7 @@ func secretLoadGenerator(clientSet *kubernetes.Clientset, id, namespace string, 
 		if err != nil {
 			fmt.Printf("failed to create secret %s: %v\n", secretName, err)
 		}
+		fmt.Printf("Created secret: %s\n", secretName)
 		time.Sleep(interval)
 	}
 	doneChan <- struct{}{}
@@ -409,12 +411,19 @@ func TestIntegration(t *testing.T) {
 
 	loadGenStartTime := time.Now()
 
+	concurrency := 20
 	for i, config := range loadGenerators {
-		go config.generator(clientSet, strconv.Itoa(i), config.namespace, config.count, config.interval, config.doneChan)
+		configConcCount := config.count / concurrency
+		config.count = configConcCount * concurrency
+		for j := 0; j < concurrency; j++ {
+			go config.generator(clientSet, fmt.Sprintf("%d-%d", i, j), config.namespace, configConcCount, config.interval, config.doneChan)
+		}
 	}
 
 	for _, config := range loadGenerators {
-		<-config.doneChan
+		for i := 0; i < concurrency; i++ {
+			<-config.doneChan
+		}
 	}
 
 	t.Logf("Load generation took %s", time.Since(loadGenStartTime))
