@@ -309,8 +309,8 @@ func collectSensorResourceUsage(config *rest.Config, readyChan chan<- struct{}, 
 	}
 	avgMem := memoryTotal / runCount
 	avgCPU := cpuTotal / runCount
-	fmt.Printf("Average CPU: %dm\t Average Memory: %dMi\n", avgCPU, avgMem)
-	fmt.Printf("Max CPU: %dm\t Max Memory Usage: %dMi\n", maxCPU, maxMem)
+	fmt.Printf("Average | CPU: %dm | Memory: %dMi\n", avgCPU, avgMem)
+	fmt.Printf("Max | CPU: %dm | Memory: %dMi\n", maxCPU, maxMem)
 	readyChan <- struct{}{}
 	return nil
 }
