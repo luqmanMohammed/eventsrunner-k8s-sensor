@@ -257,7 +257,7 @@ func waitForDeploymentToBeReady(t *testing.T, kubeClient *kubernetes.Clientset, 
 		}
 		time.Sleep(time.Second)
 	}
-	runShellCommand(t, fmt.Sprintf("kubectl describe deployment %s -n %s -o yaml", deploymentName, namespace), true)
+	runShellCommand(t, fmt.Sprintf("kubectl describe deployment %s -n %s", deploymentName, namespace), true)
 
 	t.Fatalf("deployment %s is not ready", deploymentName)
 }
