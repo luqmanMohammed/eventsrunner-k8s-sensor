@@ -254,6 +254,8 @@ func waitForDeploymentToBeReady(t *testing.T, kubeClient *kubernetes.Clientset, 
 		}
 		time.Sleep(time.Second)
 	}
+	runShellCommand(t, fmt.Sprintf("kubectl describe deployment %s -n %s -o yaml", deploymentName, namespace))
+
 	t.Fatalf("deployment %s is not ready", deploymentName)
 }
 
@@ -392,7 +394,7 @@ func TestIntegration(t *testing.T) {
 	}
 	defer clientSet.AppsV1().Deployments("eventsrunner").Delete(context.Background(), deployment.Name, metav1.DeleteOptions{})
 	// Wait for deployment to be ready
-	waitForDeploymentToBeReady(t, clientSet, "eventsrunner", deployment.Name, 30)
+	waitForDeploymentToBeReady(t, clientSet, "eventsrunner", deployment.Name, 60)
 
 	// Setup monitoring
 	metricsReadyChan := make(chan struct{})
