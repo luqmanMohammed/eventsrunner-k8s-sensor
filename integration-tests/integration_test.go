@@ -210,9 +210,12 @@ func prepareAndRunJWTBasedMockServer(lgConfigs []*loadGeneratorConfig) {
 	}
 }
 
-func runShellCommand(t *testing.T, command string) {
+func runShellCommand(t *testing.T, command string, registerSTDOUT bool) {
 	cmd := exec.Command("bash", "-c", command)
 	cmd.Stderr = os.Stderr
+	if registerSTDOUT {
+		cmd.Stdout = os.Stdout
+	}
 	if err := cmd.Run(); err != nil {
 		t.Fatalf("failed to execute command %s: %v", command, err)
 	}
@@ -254,7 +257,7 @@ func waitForDeploymentToBeReady(t *testing.T, kubeClient *kubernetes.Clientset, 
 		}
 		time.Sleep(time.Second)
 	}
-	runShellCommand(t, fmt.Sprintf("kubectl describe deployment %s -n %s -o yaml", deploymentName, namespace))
+	runShellCommand(t, fmt.Sprintf("kubectl describe deployment %s -n %s -o yaml", deploymentName, namespace), true)
 
 	t.Fatalf("deployment %s is not ready", deploymentName)
 }
@@ -328,8 +331,8 @@ func TestIntegration(t *testing.T) {
 	go prepareAndRunJWTBasedMockServer(loadGenerators)
 
 	// Setting up prerequisites
-	runShellCommand(t, "kubectl create -f prerequisite-k8s-resources.yaml")
-	defer runShellCommand(t, "kubectl delete -f prerequisite-k8s-resources.yaml")
+	runShellCommand(t, "kubectl create -f prerequisite-k8s-resources.yaml", false)
+	defer runShellCommand(t, "kubectl delete -f prerequisite-k8s-resources.yaml", false)
 
 	// Get Test Environment IP
 	ip := getCurrentEnvIP(t)
