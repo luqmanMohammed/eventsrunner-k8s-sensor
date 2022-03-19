@@ -67,6 +67,7 @@ jobs:
           fail_ci_if_error: true
 
   integration-tests:
+    needs: build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
