@@ -1,8 +1,6 @@
 name: ci
 on:
   pull_request:
-    branches: [main, develop]
-  push:
     branches: [main]  
 
 env:
@@ -114,13 +112,3 @@ jobs:
             ${{ runner.os }}-go-
       - name: Run tests
         run: IMAGE_TAG=${{ github.sha }} INT_TEST="true" go test -v ./integration-tests/... 
-
-
-  refresh-go-report:
-    runs-on: ubuntu-latest
-    if: ${{ github.ref_name == 'main' }}
-    steps:
-      - name: Refresh Go Report
-        uses: creekorful/goreportcard-action@v1.0
-
-  
