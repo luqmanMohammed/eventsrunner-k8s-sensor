@@ -6,6 +6,8 @@ RUN adduser -D sensoruser
 
 COPY --chown=sensoruser:sensoruser eventsrunner-k8s-sensor /usr/local/bin/eventsrunner-k8s-sensor
 
+RUN chmod +x /usr/local/bin/eventsrunner-k8s-sensor
+
 USER sensoruser
 
 ENTRYPOINT [ "eventsrunner-k8s-sensor" ]
