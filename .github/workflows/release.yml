@@ -1,15 +1,14 @@
 name: release
 on:
-  # pull_request:
-  #   branches: [develop]
-  #   types: [closed]
-  push:
+  pull_request:
     branches: [develop]
+    types: [closed]
+  # push:
+  #   branches: [develop]
 
 jobs:
   create-release:
     runs-on: ubuntu-latest
-    # if: ${{ github.ref_name == 'main' }}
     steps:
       - name: Semver Release
         uses: K-Phoen/semver-release-action@v1.2.0
