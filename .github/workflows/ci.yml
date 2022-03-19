@@ -25,7 +25,7 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-go-
       - name: Build
-        run: go build ./...
+        run: go build -v .
 
   unit-tests:
     runs-on: ubuntu-latest
@@ -66,7 +66,8 @@ jobs:
           files: coverage.out
           fail_ci_if_error: true
 
-  build-docker-image-and-run-int-tests:
+  integration-tests:
+    needs: build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
@@ -76,7 +77,7 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_ACCESS_TOKEN }}
       - name: Build Docker Image
-        run: DOCKER_BUILDKIT=1 docker build -t ${{ secrets.DOCKERHUB_USERNAME }}/eventsrunner-k8s-sensor:${{ github.sha }} .
+        run: DOCKER_BUILDKIT=1 docker build -f Dockerfile -t ${{ secrets.DOCKERHUB_USERNAME }}/eventsrunner-k8s-sensor:${{ github.sha }} .
       - name: Scan Docker Image using Trivy
         uses: aquasecurity/trivy-action@master
         with:
@@ -98,8 +99,6 @@ jobs:
           args: >-
             --image='rancher/k3s:v1.23.4-k3s1'
             --agents=1
-      - name: Docker images
-        run: docker images
       - name: Upload Docker Image to K8s Cluster
         run: k3d image import -c cluster ${{ secrets.DOCKERHUB_USERNAME }}/eventsrunner-k8s-sensor:${{ github.sha }}
       - uses: actions/setup-go@v2
@@ -116,9 +115,34 @@ jobs:
       - name: Run tests
         run: IMAGE_TAG=${{ github.sha }} INT_TEST="true" go test -v ./integration-tests/... 
 
+
   refresh-go-report:
     runs-on: ubuntu-latest
     if: ${{ github.ref_name == 'main' }}
     steps:
       - name: Refresh Go Report
         uses: creekorful/goreportcard-action@v1.0
+
+  create-release:
+    runs-on: ubuntu-latest
+    if: ${{ github.ref_name == 'main' }}
+    needs: build
+    steps:
+      - name: Get build artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: build-artifact
+      - name: Login into Docker Hub
+        uses: docker/login-action@v1
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_ACCESS_TOKEN }}
+      - name: Semver Release
+        uses: K-Phoen/semver-release-action@v1.2.0
+        id: release-tag
+        with:
+          release_strategy: 'none'
+          release_branch: 'main'
+      - name: Build release image
+        run: DOCKER_BUILDKIT=1 docker build -f Dockerfile.CI -t ${{ secrets.DOCKERHUB_USERNAME }}/eventsrunner-k8s-sensor:${{ steps.release-tag.outputs.tag }} .
+
