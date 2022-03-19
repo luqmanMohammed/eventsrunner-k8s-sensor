@@ -32,6 +32,7 @@ type Rule struct {
 	schema.GroupVersionResource
 	ID         RuleID      `json:"id"`
 	Namespaces []string    `json:"namespaces"`
+	Namespaced bool        `json:"-"`
 	EventTypes []EventType `json:"eventTypes"`
 	UpdatesOn  []string    `json:"updatesOn"`
 }

@@ -1,0 +1,10 @@
+---
+apiVersion: "v1"
+kind: ConfigMap
+metadata:
+  name: eventsrunner-k8s-sensor-config
+  namespace: eventsrunner
+data:
+  config.yaml: |
+    ---
+    executorType: "log"
