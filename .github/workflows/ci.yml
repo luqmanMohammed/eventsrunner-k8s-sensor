@@ -6,7 +6,7 @@ on:
     branches: [main]  
 
 env:
-  go_version: 1.17
+  go_version: 1.18
 
 jobs:
   build:
