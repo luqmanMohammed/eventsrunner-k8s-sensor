@@ -1,0 +1,24 @@
+patch:
+  prs:
+    comment: >
+      This PR is considered as a patch.
+    unlabel:
+      - 'minor'
+      - 'major'
+
+minor:
+  prs:
+    comment: >
+      This PR is considered as a minor change.
+    unlabel:
+      - 'patch'
+      - 'major'
+
+major:
+  prs:
+    comment: >
+      This PR is considered as a major change.
+    unlabel:
+      - 'patch'
+      - 'minor'
+    
