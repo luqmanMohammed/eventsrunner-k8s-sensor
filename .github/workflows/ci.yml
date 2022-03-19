@@ -67,7 +67,10 @@ jobs:
           fail_ci_if_error: true
 
   integration-tests:
+<<<<<<< HEAD
+=======
     needs: build
+>>>>>>> 3e8ff485ca14db478ee1e0174edb151a7954655b
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
@@ -126,12 +129,7 @@ jobs:
   create-release:
     runs-on: ubuntu-latest
     if: ${{ github.ref_name == 'main' }}
-    needs: build
     steps:
-      - name: Get build artifact
-        uses: actions/download-artifact@v3
-        with:
-          name: build-artifact
       - name: Login into Docker Hub
         uses: docker/login-action@v1
         with:
