@@ -67,10 +67,6 @@ jobs:
           fail_ci_if_error: true
 
   integration-tests:
-<<<<<<< HEAD
-=======
-    needs: build
->>>>>>> 3e8ff485ca14db478ee1e0174edb151a7954655b
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
