@@ -111,6 +111,8 @@ jobs:
             --agents=1
       - name: Docker images
         run: docker images
+      - name: Upload snapshot image to Dockerhub
+        run: docker push ${{ secrets.DOCKERHUB_USERNAME }}/eventsrunner-k8s-sensor:${{ github.sha }}
       - name: Upload Docker Image to K8s Cluster
         run: k3d image import -c cluster ${{ secrets.DOCKERHUB_USERNAME }}/eventsrunner-k8s-sensor:${{ github.sha }}
       - uses: actions/setup-go@v2
