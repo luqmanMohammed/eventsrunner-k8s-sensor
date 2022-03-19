@@ -10,10 +10,10 @@ jobs:
     steps:
       - uses: actions/checkout@v2 
       - name: Semver Release
-        uses: K-Phoen/semver-release-action@v1.2.0
+        uses: K-Phoen/semver-release-action@v1.3.0
         id: release-tag
         with:
-          release_strategy: 'tag'
+          release_strategy: "none"
           release_branch: 'main'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -21,6 +21,14 @@ jobs:
         run: DOCKER_BUILDKIT=1 docker build -f Dockerfile -t ${{ secrets.DOCKERHUB_USERNAME }}/eventsrunner-k8s-sensor:${{ steps.release-tag.outputs.tag }} .
       - name: Push release image
         run: docker push ${{ secrets.DOCKERHUB_USERNAME }}/eventsrunner-k8s-sensor:${{ steps.release-tag.outputs.tag }}
+      - name: Create/Update the tag
+        uses: julb/action-manage-tag@v1
+        with:
+          name: ${{ steps.release-tag.outputs.tag }}
+          state: present
+          from: ${{ github.ref }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Create release
         id: release
         uses: softprops/action-gh-release@v1
