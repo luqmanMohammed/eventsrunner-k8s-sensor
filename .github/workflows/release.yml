@@ -1,8 +1,10 @@
 name: release
 on:
-  pull_request:
+  # pull_request:
+  #   branches: [develop]
+  #   types: [closed]
+  push:
     branches: [develop]
-    types: [closed]
 
 jobs:
   create-release:
