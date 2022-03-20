@@ -1,7 +1,7 @@
 patch:
   prs:
     comment: >
-      This PR is considered as a patch.
+      PR marked as a patch
     unlabel:
       - 'minor'
       - 'major'
@@ -9,7 +9,7 @@ patch:
 minor:
   prs:
     comment: >
-      This PR is considered as a minor change.
+      PR marked as a minor change
     unlabel:
       - 'patch'
       - 'major'
@@ -17,7 +17,7 @@ minor:
 major:
   prs:
     comment: >
-      This PR is considered as a major change.
+      PR marked as a major change
     unlabel:
       - 'patch'
       - 'minor'

@@ -43,6 +43,12 @@ This project implements a config-driven sensor to listen to Kubernetes events an
 
 ## 3. Deployment
 
+For every new release, a new image will be built, scanned and pushed to the registry at [Docker Registry](https://hub.docker.com/r/luqmanmohammed/eventsrunner-k8s-sensor). The image will be tagged with the version number of the release.
+
+```shell
+docker pull luqmanmohammed/eventsrunner-k8s-sensor:<release tag>
+```
+
 ### 3.1. Kubernetes
 
 > Caution: this cluster role provides access to all resources in the cluster.

@@ -4,11 +4,17 @@ on:
     branches: [main]
     types: [closed]
 
+env:
+  go_version: 1.18
+
+permissions:
+  contents: write
+
 jobs:
   create-release:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2 
+      - uses: actions/checkout@v2
       - name: Semver Release
         uses: K-Phoen/semver-release-action@v1.3.0
         id: release-tag
@@ -17,16 +23,7 @@ jobs:
           release_branch: 'main'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - name: Login to Docker Hub
-        uses: docker/login-action@v1
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_ACCESS_TOKEN }}
-      - name: Build release image
-        run: DOCKER_BUILDKIT=1 docker build -f Dockerfile -t ${{ secrets.DOCKERHUB_USERNAME }}/eventsrunner-k8s-sensor:${{ steps.release-tag.outputs.tag }} .
-      - name: Push release image
-        run: docker push ${{ secrets.DOCKERHUB_USERNAME }}/eventsrunner-k8s-sensor:${{ steps.release-tag.outputs.tag }}
-      - name: Create/Update the tag
+      - name: Create the tag
         uses: julb/action-manage-tag@v1
         with:
           name: ${{ steps.release-tag.outputs.tag }}
@@ -34,15 +31,32 @@ jobs:
           from: ${{ github.ref }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/setup-go@v2
+        with:
+          go-version: ${{ env.go_version }}
+      - name: Build release artifact
+        run: go build -v .
+      - name: Archive release artifact
+        run: tar -czf eventsrunner-k8s-sensor-${{ steps.release-tag.outputs.tag }}-linux.tar.gz eventsrunner-k8s-sensor
+      - name: Login to Docker Hub
+        uses: docker/login-action@v1
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_ACCESS_TOKEN }}
       - name: Create release
         id: release
         uses: softprops/action-gh-release@v1
         with:
           generate_release_notes: true
           tag_name: ${{ steps.release-tag.outputs.tag }}
+          files: |
+            eventsrunner-k8s-sensor-${{ steps.release-tag.outputs.tag }}-linux.tar.gz
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
+      - name: Build release image
+        run: DOCKER_BUILDKIT=1 docker build -f Dockerfile -t ${{ secrets.DOCKERHUB_USERNAME }}/eventsrunner-k8s-sensor:${{ steps.release-tag.outputs.tag }} .
+      - name: Push release image
+        run: docker push ${{ secrets.DOCKERHUB_USERNAME }}/eventsrunner-k8s-sensor:${{ steps.release-tag.outputs.tag }}
 
   refresh-go-report:
     runs-on: ubuntu-latest
