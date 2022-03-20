@@ -37,7 +37,7 @@ jobs:
       - name: Build release artifact
         run: go build -v .
       - name: Archive release artifact
-        run: tar -czf eventsrunner-k8s-sensor-${{ steps.release-tag.outputs.tag }}.tar.gz eventsrunner-k8s-sensor
+        run: tar -czf eventsrunner-k8s-sensor-${{ steps.release-tag.outputs.tag }}-linux.tar.gz eventsrunner-k8s-sensor
       - name: Login to Docker Hub
         uses: docker/login-action@v1
         with:
@@ -50,7 +50,7 @@ jobs:
           generate_release_notes: true
           tag_name: ${{ steps.release-tag.outputs.tag }}
           files: |
-            eventsrunner-k8s-sensor-${{ steps.release-tag.outputs.tag }}.tar.gz
+            eventsrunner-k8s-sensor-${{ steps.release-tag.outputs.tag }}-linux.tar.gz
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Build release image
