@@ -176,7 +176,36 @@ Following steps will be performed to validate the rule:
 
 Kubernetes Sensor supports loading rules from ConfigMaps. ConfigMaps in the `SensorNamespace` ([configurable](#31-sensor-configuration)) with the label `SensorRuleConfigMapLabel` ([configurable](#31-sensor-configuration)) will be considered as rules ConfigMaps. Rule ConfigMap's data field should have the key `rules` and the value should be a JSON array of rules JSON objects as depicted above. The sensor will automatically reload the affected rules if any of the rule ConfigMaps are updated.
 
+Example Config - Rules - Config Map:
+
+```yaml
 ---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: events-runner-k8s-sensor-rules-01
+  namespace: eventsrunner # Configured using SensorNamespace
+  labels:
+    er-k8s-sensor-rules: "true" # Configured using SensorRuleConfigMapLabel
+data:
+  rules: |
+    [{
+    "id": "cm-rule-1",
+    "group": "",
+    "version": "v1",
+    "resource": "configmaps",
+    "namespaces": ["testns"],
+    "eventTypes": ["ADDED", "MODIFIED"],
+    "updatesOn": ["data"]
+    },{
+    "id": "secrets-rule-1",
+    "group": "",
+    "version": "v1",
+    "resource": "secrets",
+    "namespaces": ["default"],
+    "eventTypes": ["ADDED","DELETED"]
+    }]
+```
 
 ## 5. Executor (Processor/Action)
 
