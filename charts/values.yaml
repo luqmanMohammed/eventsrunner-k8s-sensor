@@ -7,10 +7,10 @@ sensorName: &sensorName "eventsrunner-k8s-sensor"
 replicaCount: 1
 
 image:
-  repository: nginx
+  repository: luqmanmohammed/eventsrunner-k8s-sensor
   pullPolicy: IfNotPresent
   # Overrides the image tag whose default is the chart appVersion.
-  tag: ""
+  tag: "v1.1.2"
 
 imagePullSecrets: []
 
@@ -23,7 +23,8 @@ serviceAccount:
   # If not set and create is true, a name is generated using the fullname template
   name: ""
 
-podAnnotations: {}
+podAnnotations:
+  "deployment": "eventsrunner-k8s-sensor"
 
 podSecurityContext: {}
   # fsGroup: 2000
@@ -60,6 +61,7 @@ configMaps:
     meta:
       name: *sensorName
     config:
+      logVerbosity: 3
       sensorName: *sensorName
       sensorRuleConfigMapLabel: "er-k8s-sensor-rules=true"
       workerCount: 10
@@ -70,14 +72,14 @@ configMaps:
       scriptPrefix: "er-script-"
       authType: "none"
       eventsRunnerBaseURL: ""
-      requestTimeout: ""
+      requestTimeout: "10s"
       caCertPath: ""
       clientCertPath: ""
       clientKeyPath: ""
       jwtToken: ""
   rulesConfig:
     meta:
-      name: *sensorName
+      name: rules-01
     rules:
       - id: cm-test-1
         group: ""
@@ -91,4 +93,23 @@ configMaps:
           - data
         namespaces:
           - default
+      - id: roles-test-1
+        group: "rbac.authorization.k8s.io"
+        version: v1
+        resource: roles
+        eventTypes:
+          - ADDED
+        
       
+clusterrole:
+  name: *sensorName
+  dynamic: true
+  staticRules:
+    - apiGroups:
+        - ""
+      resources:
+        - configmaps
+      verbs:
+        - get
+        - list
+        - watch
