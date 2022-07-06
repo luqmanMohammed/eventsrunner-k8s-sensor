@@ -47,11 +47,15 @@ jobs:
             yq
           yq: 4.25.3
       - name: Update chart app version
-        run: yq -i  '.appVersion = "${{ steps.release-tag.outputs.tag }}"' ./charts/Chart.yaml
-      - name: commit appversion change
-        run: git add charts/Chart.yaml && git commit -m "[ci-skip] Update app version to ${{ steps.release-tag.outputs.tag }}"
-      - name: Push chart change
-        run: git push origin
+        run: yq -i  '.appVersion = "${{ steps.release-tag.outputs.tag }}"' ./charts/Chart.yaml      
+      - name: Push chart update
+        uses: Amraneze/push-to-protected-branch@v1.5.0
+        with:
+          repository: ${{ github.repository }}
+          branch_name: ${{ github.ref_name }}
+          github_token: ${{ secrets.TOKEN }}
+          commit_message: '[ci-skip] Update chart app version to v${{ steps.release-tag.outputs.tag }}'
+          files_to_commit: './charts/Chart.yaml'
       - uses: azure/setup-helm@v3
       - name: Helm package
         run: helm package ./charts/
