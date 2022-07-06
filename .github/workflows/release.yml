@@ -49,7 +49,7 @@ jobs:
       - name: Update chart app version
         run: yq -i  '.appVersion = "${{ steps.release-tag.outputs.tag }}"' ./charts/Chart.yaml      
       - name: Push chart update
-        uses: Amraneze/push-to-protected-branch@latest
+        uses: Amraneze/push-to-protected-branch@v1.5.0
         with:
           repository: ${{ github.repository }}
           branch_name: ${{ github.ref_name }}
