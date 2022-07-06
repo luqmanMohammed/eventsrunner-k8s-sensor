@@ -43,7 +43,11 @@ jobs:
         run: DOCKER_BUILDKIT=1 docker build -f Dockerfile -t ${{ secrets.DOCKERHUB_USERNAME }}/eventsrunner-k8s-sensor:${{ steps.release-tag.outputs.tag }} .
       - name: Push release image
         run: docker push ${{ secrets.DOCKERHUB_USERNAME }}/eventsrunner-k8s-sensor:${{ steps.release-tag.outputs.tag }}
-      - uses: chrisdickinson/setup-yq@latest
+      - uses: yokawasa/action-setup-kube-tools@v0.7.1
+        with:
+          setup-tools: |
+            yq
+          yq: 4.25.3
       - name: Update chart app version
         run: yq -i  '.appVersion = "${{ steps.release-tag.outputs.tag }}"' ./charts/Chart.yaml
       - name: commit appversion change
