@@ -41,8 +41,6 @@ jobs:
           password: ${{ secrets.DOCKERHUB_ACCESS_TOKEN }}
       - name: Build release image
         run: DOCKER_BUILDKIT=1 docker build -f Dockerfile -t ${{ secrets.DOCKERHUB_USERNAME }}/eventsrunner-k8s-sensor:${{ steps.release-tag.outputs.tag }} .
-      - name: Push release image
-        run: docker push ${{ secrets.DOCKERHUB_USERNAME }}/eventsrunner-k8s-sensor:${{ steps.release-tag.outputs.tag }}
       - uses: yokawasa/action-setup-kube-tools@v0.7.1
         with:
           setup-tools: |
@@ -61,6 +59,8 @@ jobs:
         run: echo ${{ secrets.GITHUB_TOKEN }} | helm registry login --username ${{ github.actor }} --password-stdin https://ghcr.io
       - name: Helm push
         run: helm push eventsrunner-k8s-sensor-{{ steps.release-tag.outputs.tag }}-linux.tgz oci://ghcr.io
+      - name: Push release image
+        run: docker push ${{ secrets.DOCKERHUB_USERNAME }}/eventsrunner-k8s-sensor:${{ steps.release-tag.outputs.tag }}
       - name: Create the tag
         uses: julb/action-manage-tag@v1
         with:
