@@ -4,6 +4,7 @@ metadata:
   name: {{ include "eventsrunner-k8s-sensor.fullname" . }}
   labels:
     {{- include "eventsrunner-k8s-sensor.labels" . | nindent 4 }}
+  namespace: {{ $.Release.Namespace }}
 spec:
   replicas: 1 # Make configurable after lease based HA is added
   strategy:
@@ -13,10 +14,10 @@ spec:
       {{- include "eventsrunner-k8s-sensor.selectorLabels" . | nindent 6 }}
   template:
     metadata:
-      {{- with .Values.podAnnotations }}
       annotations:
-        {{- toYaml . | nindent 8 }}
         rollme: {{ randAlphaNum 5 | quote }}
+      {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
       {{- end }}
       labels:
         {{- include "eventsrunner-k8s-sensor.selectorLabels" . | nindent 8 }}
@@ -43,7 +44,7 @@ spec:
       volumes:
         - name: config
           configMap:
-            name: {{ .Values.configMaps.sensorConfig.meta.name }}
+            name: {{ include "eventsrunner-k8s-sensor.fullname" $ }}
             items:
               - key: config.yaml
                 path: config.yaml

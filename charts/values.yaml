@@ -2,9 +2,7 @@
 # This is a YAML-formatted file.
 # Declare variables to be passed into your templates.
 
-sensorName: &sensorName "eventsrunner-k8s-sensor"
-
-replicaCount: 1
+fullnameOverride: ""
 
 image:
   repository: luqmanmohammed/eventsrunner-k8s-sensor
@@ -13,7 +11,6 @@ image:
   tag: "v1.1.2"
 
 imagePullSecrets: []
-
 serviceAccount:
   # Specifies whether a service account should be created
   create: true
@@ -23,12 +20,9 @@ serviceAccount:
   # If not set and create is true, a name is generated using the fullname template
   name: ""
 
-podAnnotations:
-  "deployment": "eventsrunner-k8s-sensor"
-
+podAnnotations: {}
 podSecurityContext: {}
   # fsGroup: 2000
-
 securityContext: {}
   # capabilities:
   #   drop:
@@ -36,7 +30,6 @@ securityContext: {}
   # readOnlyRootFilesystem: true
   # runAsNonRoot: true
   # runAsUser: 1000
-
 resources: {}
   # We usually recommend not to specify default resources and to leave this as a conscious
   # choice for the user. This also increases chances charts run on environments with little
@@ -48,28 +41,21 @@ resources: {}
   # requests:
   #   cpu: 100m
   #   memory: 128Mi
-
 nodeSelector: {}
-
 tolerations: []
-
 affinity: {}
-
 
 configMaps:
   sensorConfig:
-    meta:
-      name: *sensorName
     config:
       logVerbosity: 3
-      sensorName: *sensorName
       sensorRuleConfigMapLabel: "er-k8s-sensor-rules=true"
       workerCount: 10
       maxTryCount: 3
       requeueDelay: 5s
       executorType: script
       scriptDir: "/var/scripts"
-      scriptPrefix: "er-script-"
+      scriptPrefix: "er-script"
       authType: "none"
       eventsRunnerBaseURL: ""
       requestTimeout: "10s"
@@ -100,10 +86,8 @@ configMaps:
         eventTypes:
           - ADDED
         
-      
 clusterrole:
-  name: *sensorName
-  dynamic: true
+  dynamic: true # If dynamic is set to true, the clusterrole will be created dynamically using the roles defined at configMaps.rulesConfig.rules
   staticRules:
     - apiGroups:
         - ""

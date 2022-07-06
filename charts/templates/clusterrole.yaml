@@ -2,7 +2,7 @@
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: {{ .name }}
+  name: {{ include "eventsrunner-k8s-sensor.fullname" $ }}
   labels:
     {{- include "eventsrunner-k8s-sensor.labels" $ | nindent 4 }}
 rules:

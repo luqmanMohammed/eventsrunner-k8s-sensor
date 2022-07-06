@@ -1,20 +1,4 @@
-{{- with .Values.configMaps }}
-{{- with .sensorConfig }}
-kind: ConfigMap
-apiVersion: v1
-metadata:
-  name: {{ .meta.name }}
-  namespace: {{ $.Release.Namespace }} 
-  labels:
-    {{- include "eventsrunner-k8s-sensor.labels" $ | nindent 4 }}
-data:
-  config.yaml: |-
-    {{- range $key, $value := .config }}
-    {{ $key }}: {{ $value | quote }}
-    {{- end }}
-{{- end }}
-
-{{- with .rulesConfig }}
+{{- with .Values.configMaps.rulesConfig }}
 ---
 kind: ConfigMap
 apiVersion: v1
@@ -30,6 +14,5 @@ metadata:
 data:
   rules: |-
     {{ .rules | mustToJson }}
-{{ end }}
 {{ end }}
     

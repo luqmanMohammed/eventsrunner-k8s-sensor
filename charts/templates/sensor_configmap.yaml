@@ -1,0 +1,15 @@
+{{- with .Values.configMaps.sensorConfig }}
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: {{ include "eventsrunner-k8s-sensor.fullname" $ }}
+  namespace: {{ $.Release.Namespace }} 
+  labels:
+    {{- include "eventsrunner-k8s-sensor.labels" $ | nindent 4 }}
+data:
+  config.yaml: |-
+    {{- range $key, $value := .config }}
+    {{ $key }}: {{ $value | quote }}
+    {{- end }}
+    sensorName: {{ include "eventsrunner-k8s-sensor.fullname" $ }}
+{{- end }}
