@@ -1,0 +1,27 @@
+{{- with .Values.clusterrole }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "eventsrunner-k8s-sensor.fullname" $ }}
+  labels:
+    {{- include "eventsrunner-k8s-sensor.labels" $ | nindent 4 }}
+rules:
+{{- if .dynamic }}
+{{- range $.Values.configMaps.rulesConfig.rules }}
+- apiGroups:
+    - {{ .group | quote }} 
+  resources:
+    - {{ .resource | quote }}
+  verbs:
+    - get
+    - watch
+    - list
+{{- end }}
+{{- else }}
+{{- range .staticRules }}
+- apiGroups: {{ .apiGroups }}
+  resources: {{ .resources }}
+  verbs: {{ .verbs }}
+{{- end }}
+{{- end }}
+{{- end }}

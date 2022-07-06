@@ -1,0 +1,17 @@
+{{- with .Values.clusterrole }}
+apiVersion: rbac.authorization.k8s.io/v1
+# This cluster role binding allows anyone in the "manager" group to read secrets in any namespace.
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "eventsrunner-k8s-sensor.fullname" $ }}
+  labels:
+    {{- include "eventsrunner-k8s-sensor.labels" $ | nindent 4 }}
+subjects:
+- kind: ServiceAccount
+  name: {{ include "eventsrunner-k8s-sensor.serviceAccountName" $ }}
+  namespace: {{ $.Release.Namespace }}
+roleRef:
+  kind: ClusterRole
+  name: {{ include "eventsrunner-k8s-sensor.fullname" $ }}
+  apiGroup: rbac.authorization.k8s.io
+{{- end }}
