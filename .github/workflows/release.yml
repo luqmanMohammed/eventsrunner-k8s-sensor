@@ -53,7 +53,7 @@ jobs:
         with:
           repository: ${{ github.repository }}
           branch_name: ${{ github.ref_name }}
-          github_token: ${{ secrets.TOKEN }}
+          github_token: ${{ github.TOKEN }}
           commit_message: '[ci-skip] Update chart app version to v${{ steps.release-tag.outputs.tag }}'
           files_to_commit: './charts/Chart.yaml'
       - uses: azure/setup-helm@v3
