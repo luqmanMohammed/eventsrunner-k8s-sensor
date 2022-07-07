@@ -53,7 +53,7 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           push-branch: 'main'
-          commit-message: '[ci-skip] Update chart app version to v${{ steps.release-tag.outputs.tag }}'
+          commit-message: '[ci-skip] Update chart app version to ${{ steps.release-tag.outputs.tag }}'
           force-add: 'true'
           files: 'charts/Chart.yaml'
           name: 'Github Actions'
@@ -64,7 +64,7 @@ jobs:
       - name: Helm login
         run: echo ${{ secrets.GITHUB_TOKEN }} | helm registry login --username luqmanmohammed --password-stdin https://ghcr.io
       - name: Helm push
-        run: helm push eventsrunner-k8s-sensor-1.0.0-linux.tgz oci://ghcr.io/luqmanmohammed/
+        run: helm push eventsrunner-k8s-sensor-1.0.0.tgz oci://ghcr.io/luqmanmohammed/
       - name: Push release image
         run: docker push ${{ secrets.DOCKERHUB_USERNAME }}/eventsrunner-k8s-sensor:${{ steps.release-tag.outputs.tag }}
       - name: Create the tag
