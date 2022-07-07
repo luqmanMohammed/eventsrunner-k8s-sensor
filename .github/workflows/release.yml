@@ -52,7 +52,7 @@ jobs:
         uses: Amraneze/push-to-protected-branch@v1.5.0
         with:
           repository: ${{ github.repository }}
-          branch_name: ${{ github.ref_name }}
+          branch_name: main
           github_token: ${{ github.TOKEN }}
           commit_message: '[ci-skip] Update chart app version to v${{ steps.release-tag.outputs.tag }}'
           files_to_commit: './charts/Chart.yaml'
@@ -60,9 +60,9 @@ jobs:
       - name: Helm package
         run: helm package ./charts/
       - name: Helm login
-        run: echo ${{ secrets.GITHUB_TOKEN }} | helm registry login --username ${{ github.actor }} --password-stdin https://ghcr.io
+        run: echo ${{ secrets.GITHUB_TOKEN }} | helm registry login --username luqmanmohammed --password-stdin https://ghcr.io
       - name: Helm push
-        run: helm push eventsrunner-k8s-sensor-{{ steps.release-tag.outputs.tag }}-linux.tgz oci://ghcr.io
+        run: helm push eventsrunner-k8s-sensor-1.0.0-linux.tgz oci://ghcr.io/luqmanmohammed/
       - name: Push release image
         run: docker push ${{ secrets.DOCKERHUB_USERNAME }}/eventsrunner-k8s-sensor:${{ steps.release-tag.outputs.tag }}
       - name: Create the tag
@@ -70,7 +70,7 @@ jobs:
         with:
           name: ${{ steps.release-tag.outputs.tag }}
           state: present
-          from: ${{ github.ref }}
+          from: main
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Create release
