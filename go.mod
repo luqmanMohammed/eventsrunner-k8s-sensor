@@ -3,7 +3,7 @@ module github.com/luqmanMohammed/eventsrunner-k8s-sensor
 go 1.18
 
 require (
-	github.com/spf13/cobra v1.5.0
+	github.com/spf13/cobra v1.6.0
 	github.com/spf13/viper v1.10.1
 	k8s.io/api v0.25.3
 	k8s.io/apiextensions-apiserver v0.25.0
@@ -30,7 +30,7 @@ require (
 	github.com/google/gofuzz v1.1.0 // indirect
 	github.com/hashicorp/hcl v1.0.0 // indirect
 	github.com/imdario/mergo v0.3.6 // indirect
-	github.com/inconshreveable/mousetrap v1.0.0 // indirect
+	github.com/inconshreveable/mousetrap v1.0.1 // indirect
 	github.com/josharian/intern v1.0.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/magiconair/properties v1.8.5 // indirect
