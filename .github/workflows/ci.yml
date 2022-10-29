@@ -1,20 +1,16 @@
 name: ci
 on:
   pull_request:
-    branches: [main, develop]
-  push:
-    branches: [main]  
+    branches: [develop]
 
 env:
-  go_version: 1.18
-
-# TODO: Refactor git branching stratergy and CI by starndardizing the workflow
+  go_version: 1.19
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - uses: actions/setup-go@v2
         with:
           go-version: ${{ env.go_version }}
@@ -29,19 +25,34 @@ jobs:
       - name: Build
         run: go build -v .
 
+  prepare-test-envs:
+    runs-on: ubuntu-latest
+    outputs:
+      latest: ${{ steps.latest.outputs.LATEST_ENV }}
+      sec-latest: ${{ steps.latest.outputs.SEC_LATEST_ENV }}
+      thr-latest: ${{ steps.latest.outputs.SEC_LATEST_ENV }}
+    steps:
+      - run: export LATEST=$(curl https://api.github.com/repos/k3s-io/k3s/releases/latest | jq -r '.name'); echo "LATEST_ENV=$LATEST" >> $GITHUB_OUTPUT
+        id: latest
+      - run: export SEC_LATEST=$(echo "${{ steps.latest.outputs.LATEST_ENV }}" | awk -F. '{print $1"."$2-1".0+k3s1"}'); echo "SEC_LATEST_ENV=$SEC_LATEST" >> $GITHUB_OUTPUT
+        id: sec-latest
+      - run: export THR_LATEST=$(echo "${{ steps.latest.outputs.LATEST_ENV }}" | awk -F. '{print $1"."$2-2".0+k3s1"}'); echo "THR_LATEST_ENV=$THR_LATEST" >> $GITHUB_OUTPUT
+        id: thr-latest
+
   unit-tests:
     runs-on: ubuntu-latest
     needs:
       - build
+      - prepare-test-envs
     strategy:
       matrix:
         k3s_k8s_image:
-          - 'rancher/k3s:v1.24.2-k3s1'
-          - 'rancher/k3s:v1.23.8-k3s1'
-          - 'rancher/k3s:v1.22.11-k3s1'
+          - ${{ needs.prepare-test-envs.outputs.latest }}
+          - ${{ needs.prepare-test-envs.outputs.sec-latest }}
+          - ${{ needs.prepare-test-envs.outputs.thr-latest }}
       fail-fast: false
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - uses: actions/setup-go@v2
         with:
           go-version: ${{ env.go_version }}
@@ -63,7 +74,7 @@ jobs:
         run: go test -v ./... -coverprofile coverage.out
       - name: Codecov
         uses: codecov/codecov-action@v2.1.0
-        if: ${{ matrix.k3s_k8s_image == 'rancher/k3s:v1.23.4-k3s1' }}
+        if: ${{ matrix.k3s_k8s_image == needs.prepare-test-envs.outputs.latest }}
         with:
           files: coverage.out
           fail_ci_if_error: true
@@ -72,7 +83,7 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - name: Login to Docker Hub
         uses: docker/login-action@v1
         with:

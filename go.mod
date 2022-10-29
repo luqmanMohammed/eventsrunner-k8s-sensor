@@ -1,6 +1,6 @@
 module github.com/luqmanMohammed/eventsrunner-k8s-sensor
 
-go 1.18
+go 1.19
 
 require (
 	github.com/spf13/cobra v1.5.0
@@ -63,5 +63,3 @@ require (
 	sigs.k8s.io/structured-merge-diff/v4 v4.2.3 // indirect
 	sigs.k8s.io/yaml v1.2.0 // indirect
 )
-
-replace github.com/spf13/viper => github.com/spf13/viper v1.10.1
