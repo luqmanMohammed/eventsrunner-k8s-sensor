@@ -47,9 +47,9 @@ jobs:
     strategy:
       matrix:
         k3s_k8s_image:
-          - rancher/k3s:${{ needs.prepare-test-envs.outputs.latest }}
-          - rancher/k3s:${{ needs.prepare-test-envs.outputs.sec_latest }}
-          - rancher/k3s:${{ needs.prepare-test-envs.outputs.thr_latest }}
+          - ${{ needs.prepare-test-envs.outputs.latest }}
+          - ${{ needs.prepare-test-envs.outputs.sec_latest }}
+          - ${{ needs.prepare-test-envs.outputs.thr_latest }}
       fail-fast: false
     steps:
       - uses: actions/checkout@v3
@@ -69,7 +69,7 @@ jobs:
         with:
           cluster-name: cluster
           args: >-
-            --image=${{ matrix.k3s_k8s_image }}
+            --image=rancher/k3s:${{ matrix.k3s_k8s_image }}
       - name: Run tests
         run: go test -v ./... -coverprofile coverage.out
       - name: Codecov
