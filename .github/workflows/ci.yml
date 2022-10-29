@@ -30,7 +30,7 @@ jobs:
     outputs:
       latest: ${{ steps.latest.outputs.LATEST_ENV }}
       sec_latest: ${{ steps.sec-latest.outputs.SEC_LATEST_ENV }}
-      thr_latest: ${{ steps.thr-latest.outputs.SEC_LATEST_ENV }}
+      thr_latest: ${{ steps.thr-latest.outputs.THR_LATEST_ENV }}
     steps:
       - run: export LATEST=$(curl https://api.github.com/repos/k3s-io/k3s/releases/latest | jq -r '.name'); echo "LATEST_ENV=$LATEST" >> $GITHUB_OUTPUT
         id: latest
