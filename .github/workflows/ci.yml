@@ -32,11 +32,11 @@ jobs:
       sec_latest: ${{ steps.sec-latest.outputs.SEC_LATEST_ENV }}
       thr_latest: ${{ steps.thr-latest.outputs.THR_LATEST_ENV }}
     steps:
-      - run: export LATEST=$(curl https://api.github.com/repos/k3s-io/k3s/releases/latest | jq -r '.name'); echo "LATEST_ENV=$LATEST" >> $GITHUB_OUTPUT
+      - run: export LATEST=$(curl https://api.github.com/repos/k3s-io/k3s/releases/latest | jq -r '.name'); echo "LATEST_ENV=$( echo $LATEST | sed "s/+/-/")" >> $GITHUB_OUTPUT
         id: latest
-      - run: export SEC_LATEST=$(echo "${{ steps.latest.outputs.LATEST_ENV }}" | awk -F. '{print $1"."$2-1".0+k3s1"}'); echo "SEC_LATEST_ENV=$SEC_LATEST" >> $GITHUB_OUTPUT
+      - run: export SEC_LATEST=$(echo "${{ steps.latest.outputs.LATEST_ENV }}" | awk -F. '{print $1"."$2-1".0-k3s1"}'); echo "SEC_LATEST_ENV=$SEC_LATEST" >> $GITHUB_OUTPUT
         id: sec-latest
-      - run: export THR_LATEST=$(echo "${{ steps.latest.outputs.LATEST_ENV }}" | awk -F. '{print $1"."$2-2".0+k3s1"}'); echo "THR_LATEST_ENV=$THR_LATEST" >> $GITHUB_OUTPUT
+      - run: export THR_LATEST=$(echo "${{ steps.latest.outputs.LATEST_ENV }}" | awk -F. '{print $1"."$2-2".0-k3s1"}'); echo "THR_LATEST_ENV=$THR_LATEST" >> $GITHUB_OUTPUT
         id: thr-latest
 
   unit-tests:
