@@ -29,8 +29,8 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       latest: ${{ steps.latest.outputs.LATEST_ENV }}
-      sec-latest: ${{ steps.latest.outputs.SEC_LATEST_ENV }}
-      thr-latest: ${{ steps.latest.outputs.SEC_LATEST_ENV }}
+      sec_latest: ${{ steps.latest.outputs.SEC_LATEST_ENV }}
+      thr_latest: ${{ steps.latest.outputs.SEC_LATEST_ENV }}
     steps:
       - run: export LATEST=$(curl https://api.github.com/repos/k3s-io/k3s/releases/latest | jq -r '.name'); echo "LATEST_ENV=$LATEST" >> $GITHUB_OUTPUT
         id: latest
@@ -47,9 +47,9 @@ jobs:
     strategy:
       matrix:
         k3s_k8s_image:
-          - ${{ needs.prepare-test-envs.outputs.latest }}
-          - ${{ needs.prepare-test-envs.outputs.sec-latest }}
-          - ${{ needs.prepare-test-envs.outputs.thr-latest }}
+          - rancher/k3s:${{ needs.prepare-test-envs.outputs.latest }}
+          - rancher/k3s:${{ needs.prepare-test-envs.outputs.sec_latest }}
+          - rancher/k3s:${{ needs.prepare-test-envs.outputs.thr_latest }}
       fail-fast: false
     steps:
       - uses: actions/checkout@v3
