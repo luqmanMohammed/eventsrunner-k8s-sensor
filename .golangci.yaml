@@ -1,0 +1,24 @@
+run:
+  timeout: "30m"
+  issue-exit-code: 1
+  tests: true
+  skip-dirs-use-default: true
+  allow-parallel-runners: true
+  go: "1.19"
+
+output:
+  print-issued-lines: true
+  print-linter-name: true
+  unique-by-line: true
+  format: json
+
+linters:
+  enable-all: true
+  disable-all: false
+
+issues:
+  exclude-use-default: true
+  exclude-case-sensitive: false
+  max-issues-per-linter: 0
+  max-same-issues: 0
+  new: false
