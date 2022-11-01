@@ -6,19 +6,19 @@ on:
 
 env:
   go_version: 1.19
-
+  yq_version: 4.29.2
 permissions:
   contents: write
   packages: write 
 
-# TODO: Refactor git branching stratergy and CI by starndardizing the workflow
 
 jobs:
-  create-release:
+  manage-version:
+    if: ${{ !contains(github.event.head_commit.message, '[skip-release]') }}
     runs-on: ubuntu-latest
-    if: ${{ !contains(github.event.head_commit.message, '[ci-skip]') }}
+    outputs:
+      tag: ${{ steps.release-tag.outputs.tag }}
     steps:
-      - uses: actions/checkout@v2
       - name: Semver Release
         uses: K-Phoen/semver-release-action@v1.3.0
         id: release-tag
@@ -27,33 +27,73 @@ jobs:
           release_branch: 'main'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  create-release:
+    runs-on: ubuntu-latest
+    needs:
+      - manage-version
+    steps:
+      - uses: actions/checkout@v3
       - uses: actions/setup-go@v2
         with:
           go-version: ${{ env.go_version }}
       - name: Build release artifact
         run: go build -v .
       - name: Archive release artifact
-        run: tar -czf eventsrunner-k8s-sensor-${{ steps.release-tag.outputs.tag }}-linux.tar.gz eventsrunner-k8s-sensor
-      - name: Login to Docker Hub
-        uses: docker/login-action@v1
+        run: tar -czf eventsrunner-k8s-sensor-${{ needs.manage-version.outputs.tag }}-linux.tar.gz eventsrunner-k8s-sensor
+      - name: Create the tag
+        uses: julb/action-manage-tag@v1
+        with:
+          name: ${{ needs.manage-version.outputs.tag }}
+          state: present
+          from: main
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Create release
+        id: release
+        uses: softprops/action-gh-release@v1
+        with:
+          generate_release_notes: true
+          tag_name: ${{ needs.manage-version.outputs.tag }}
+          files: |
+            eventsrunner-k8s-sensor-${{ needs.manage-version.outputs.tag }}-linux.tar.gz
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  create-release-image:
+    runs-on: ubuntu-latest
+    needs:
+      - manage-version
+    steps:
+      - name: Build release image
+        run: DOCKER_BUILDKIT=1 docker build -f Dockerfile -t ${{ secrets.DOCKERHUB_USERNAME }}/eventsrunner-k8s-sensor:${{ needs.manage-version.outputs.tag }} .
+      - uses: docker/login-action@v1
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_ACCESS_TOKEN }}
-      - name: Build release image
-        run: DOCKER_BUILDKIT=1 docker build -f Dockerfile -t ${{ secrets.DOCKERHUB_USERNAME }}/eventsrunner-k8s-sensor:${{ steps.release-tag.outputs.tag }} .
+      - name: Push release image
+        run: docker push ${{ secrets.DOCKERHUB_USERNAME }}/eventsrunner-k8s-sensor:${{ needs.manage-version.outputs.tag }}
+
+  create-release-chart:
+    runs-on: ubuntu-latest
+    needs:
+      - manage-version 
+    steps:
       - uses: yokawasa/action-setup-kube-tools@v0.7.1
         with:
           setup-tools: |
             yq
-          yq: 4.25.3
+          yq: ${{ env.yq_version }}
       - name: Update chart app version
-        run: yq -i  '.appVersion = "${{ steps.release-tag.outputs.tag }}"' ./charts/Chart.yaml      
+        run: |
+          yq -i  '.appVersion = "${{ needs.manage-version.outputs.tag }}"' ./charts/Chart.yaml;
+          yq -i  '.version = "${{ needs.manage-version.outputs.tag }}"' ./charts/Chart.yaml;     
       - name: push
         uses: github-actions-x/commit@v2.9
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           push-branch: 'main'
-          commit-message: '[ci-skip] Update chart app version to ${{ steps.release-tag.outputs.tag }}'
+          commit-message: '[skip-release] Update chart app version to ${{ needs.manage-version.outputs.tag }}'
           force-add: 'true'
           files: 'charts/Chart.yaml'
           name: 'Github Actions'
@@ -65,31 +105,10 @@ jobs:
         run: echo ${{ secrets.GITHUB_TOKEN }} | helm registry login --username luqmanmohammed --password-stdin https://ghcr.io
       - name: Helm push
         run: helm push eventsrunner-k8s-sensor-1.0.0.tgz oci://ghcr.io/luqmanmohammed/
-      - name: Push release image
-        run: docker push ${{ secrets.DOCKERHUB_USERNAME }}/eventsrunner-k8s-sensor:${{ steps.release-tag.outputs.tag }}
-      - name: Create the tag
-        uses: julb/action-manage-tag@v1
-        with:
-          name: ${{ steps.release-tag.outputs.tag }}
-          state: present
-          from: main
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - name: Create release
-        id: release
-        uses: softprops/action-gh-release@v1
-        with:
-          generate_release_notes: true
-          tag_name: ${{ steps.release-tag.outputs.tag }}
-          files: |
-            eventsrunner-k8s-sensor-${{ steps.release-tag.outputs.tag }}-linux.tar.gz
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
 
   refresh-go-report:
     runs-on: ubuntu-latest
-    if: ${{ !contains(github.event.head_commit.message, '[ci-skip]') }}
+    if: ${{ !contains(github.event.head_commit.message, '[skip-release]') }}
     steps:
       - name: Refresh Go Report
         uses: creekorful/goreportcard-action@v1.0
