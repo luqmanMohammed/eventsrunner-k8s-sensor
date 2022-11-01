@@ -1,0 +1,25 @@
+name: Validate release PR
+on:
+  pull_request:
+    types:
+      - opened
+      - labeled
+      - unlabeled
+    branches:
+      - main
+
+permissions:
+  pull-requests: read
+
+jobs:
+  verify-pr:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify one of required label is present on MR
+        run: |
+          curl \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            https://api.github.com/repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }} | \
+            jq -r '.labels[].name' | \
+            awk 'BEGIN { valid="no" } { if($1 == "patch" || $1 == "minor" || $1 == "major") valid="ok" } END { if(valid != "ok") exit 1 }'
