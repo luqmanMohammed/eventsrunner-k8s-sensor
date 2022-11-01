@@ -65,6 +65,7 @@ jobs:
     needs:
       - manage-version
     steps:
+      - uses: actions/checkout@v3
       - name: Build release image
         run: DOCKER_BUILDKIT=1 docker build -f Dockerfile -t ${{ secrets.DOCKERHUB_USERNAME }}/eventsrunner-k8s-sensor:${{ needs.manage-version.outputs.tag }} .
       - uses: docker/login-action@v1
@@ -79,6 +80,7 @@ jobs:
     needs:
       - manage-version 
     steps:
+      - uses: actions/checkout@v3
       - uses: yokawasa/action-setup-kube-tools@v0.7.1
         with:
           setup-tools: |

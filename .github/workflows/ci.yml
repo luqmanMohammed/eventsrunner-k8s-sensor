@@ -1,7 +1,7 @@
 name: ci
 on:
   pull_request:
-    branches: [develop]
+    branches: [develop, main]
 
 env:
   go_version: 1.19

@@ -1,0 +1,32 @@
+name: "Scheduled Scan"
+on:
+  push:
+    branches:
+      - main
+  schedule:
+    - cron: 5 01 */2 * *
+
+permissions:
+  security-events: write
+
+jobs:
+  trivy-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Build Docker Image
+        run: DOCKER_BUILDKIT=1 docker build -f Dockerfile -t ${{ secrets.DOCKERHUB_USERNAME }}/eventsrunner-k8s-sensor:${{ github.sha }} .
+      - name: Scan Docker Image using Trivy
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'image'
+          image-ref: ${{ secrets.DOCKERHUB_USERNAME }}/eventsrunner-k8s-sensor:${{ github.sha }}
+          exit-code: 1
+          format: 'sarif'
+          output: 'trivy-image-results.sarif'
+          severity: 'MEDIUM,HIGH,CRITICAL'
+      - name: Upload Trivy scan results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v2
+        if: always()
+        with:
+          sarif_file: 'trivy-image-results.sarif'
