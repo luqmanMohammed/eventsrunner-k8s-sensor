@@ -95,39 +95,41 @@ jobs:
             -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
             "https://api.github.com/repos/${{ github.repository }}/code-scanning/alerts?state=dismissed&per_page=100" | \
             jq -r '.[] | .rule.id ' > .trivyignore
+      - name: Debug
+        run: cat .trivyignore
       - name: Scan Docker Image using Trivy
         uses: aquasecurity/trivy-action@master
         with:
           scan-type: 'image'
           image-ref: ${{ secrets.DOCKERHUB_USERNAME }}/eventsrunner-k8s-sensor:${{ github.sha }}
           exit-code: 1
-          format: 'sarif'
-          output: 'trivy-image-results.sarif'
+          # format: 'sarif'
+          # output: 'trivy-image-results.sarif'
           severity: 'MEDIUM,HIGH,CRITICAL'
-      - name: Upload Trivy scan results to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@v2
-        if: always()
-        with:
-          sarif_file: 'trivy-image-results.sarif'
-      - name: Create K8s Cluster
-        uses: AbsaOSS/k3d-action@v2
-        with:
-          cluster-name: cluster
-          args: >-
-            --image='rancher/k3s:v1.23.4-k3s1'
-            --agents=1
-      - name: Upload Docker Image to K8s Cluster
-        run: k3d image import -c cluster ${{ secrets.DOCKERHUB_USERNAME }}/eventsrunner-k8s-sensor:${{ github.sha }}
-      - uses: actions/setup-go@v2
-        with:
-          go-version: ${{ env.go_version }}
-      - uses: actions/cache@v2
-        with:
-          path: |
-            ~/.cache/go-build
-            ~/go/pkg/mod
-          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-          restore-keys: |
-            ${{ runner.os }}-go-
-      - name: Run Integration Tests
-        run: IMAGE_TAG=${{ github.sha }} INT_TEST="true" go test -v ./integration-tests/... 
+      # - name: Upload Trivy scan results to GitHub Security tab
+      #   uses: github/codeql-action/upload-sarif@v2
+      #   if: always()
+      #   with:
+      #     sarif_file: 'trivy-image-results.sarif'
+      # - name: Create K8s Cluster
+      #   uses: AbsaOSS/k3d-action@v2
+      #   with:
+      #     cluster-name: cluster
+      #     args: >-
+      #       --image='rancher/k3s:v1.23.4-k3s1'
+      #       --agents=1
+      # - name: Upload Docker Image to K8s Cluster
+      #   run: k3d image import -c cluster ${{ secrets.DOCKERHUB_USERNAME }}/eventsrunner-k8s-sensor:${{ github.sha }}
+      # - uses: actions/setup-go@v2
+      #   with:
+      #     go-version: ${{ env.go_version }}
+      # - uses: actions/cache@v2
+      #   with:
+      #     path: |
+      #       ~/.cache/go-build
+      #       ~/go/pkg/mod
+      #     key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+      #     restore-keys: |
+      #       ${{ runner.os }}-go-
+      # - name: Run Integration Tests
+      #   run: IMAGE_TAG=${{ github.sha }} INT_TEST="true" go test -v ./integration-tests/... 
