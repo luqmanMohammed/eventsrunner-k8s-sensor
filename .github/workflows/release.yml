@@ -90,16 +90,6 @@ jobs:
         run: |
           yq -i  '.appVersion = "${{ needs.manage-version.outputs.tag }}"' ./charts/Chart.yaml;
           yq -i  '.version = "${{ needs.manage-version.outputs.tag }}"' ./charts/Chart.yaml;     
-      - name: push
-        uses: github-actions-x/commit@v2.9
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          push-branch: 'main'
-          commit-message: '[skip-release] Update chart app version to ${{ needs.manage-version.outputs.tag }}'
-          force-add: 'true'
-          files: 'charts/Chart.yaml'
-          name: 'Github Actions'
-          email: release-bot@github.com
       - uses: azure/setup-helm@v3
       - name: Helm package
         run: helm package ./charts/
