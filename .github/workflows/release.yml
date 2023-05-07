@@ -5,7 +5,7 @@ on:
     types: [closed]
 
 env:
-  go_version: 1.19
+  go_version: 1.20
   yq_version: 4.29.2
 permissions:
   contents: write

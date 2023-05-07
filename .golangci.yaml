@@ -4,7 +4,7 @@ run:
   tests: true
   skip-dirs-use-default: true
   allow-parallel-runners: true
-  go: "1.19"
+  go: "1.20"
 
 output:
   print-issued-lines: true

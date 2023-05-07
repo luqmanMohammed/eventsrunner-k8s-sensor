@@ -4,7 +4,7 @@ on:
     branches: [develop, main]
 
 env:
-  go_version: 1.19
+  go_version: 1.20
 
 jobs:
   build:
