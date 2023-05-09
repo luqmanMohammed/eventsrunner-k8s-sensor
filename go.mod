@@ -3,7 +3,7 @@ module github.com/luqmanMohammed/eventsrunner-k8s-sensor
 go 1.20
 
 require (
-	github.com/spf13/cobra v1.6.1
+	github.com/spf13/cobra v1.7.0
 	github.com/spf13/viper v1.15.0
 	k8s.io/api v0.27.1
 	k8s.io/apiextensions-apiserver v0.26.3
